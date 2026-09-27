@@ -20,7 +20,11 @@ import {
   Check,
   X,
   Camera,
-  RefreshCw
+  RefreshCw,
+  Key,
+  ShieldAlert,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { DatabaseService } from '../services/dbMock';
 import { User } from '../types';
@@ -87,6 +91,45 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
   const [authTab, setAuthTab] = useState<'switch' | 'login' | 'register'>('switch');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Security Verification Modal State (Bảo mật thông tin cá nhân - Bắt buộc nhập đúng tài khoản và mật khẩu mới vào được)
+  const [isSecurityVerifyOpen, setIsSecurityVerifyOpen] = useState(false);
+  const [verifyAccountInput, setVerifyAccountInput] = useState(user.username);
+  const [verifyPasswordInput, setVerifyPasswordInput] = useState('');
+  const [showVerifyPassword, setShowVerifyPassword] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'security'>('profile');
+
+  // Change Password Form State
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // Switch Account Modal State (Yêu cầu mật khẩu của tài khoản muốn chuyển)
+  const [selectedSwitchUser, setSelectedSwitchUser] = useState<User | null>(null);
+  const [switchPasswordInput, setSwitchPasswordInput] = useState('');
+  const [showSwitchPassword, setShowSwitchPassword] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  // Direct Login Form State in Modal
+  const [loginInput, setLoginInput] = useState('');
+  const [loginPasswordInput, setLoginPasswordInput] = useState('');
+  const [showLoginModalPassword, setShowLoginModalPassword] = useState(false);
+  const [authModalLoginError, setAuthModalLoginError] = useState<string | null>(null);
+
+  // Register Form State in Modal
+  const [regName, setRegName] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [regSchool, setRegSchool] = useState('Trường THPT Số 1 Phan Đình Phùng');
+  const [regClass, setRegClass] = useState('Lớp 11A1');
+  const [regAvatar, setRegAvatar] = useState(AVATAR_PRESETS[0].url);
+  const [regError, setRegError] = useState<string | null>(null);
+
   // Edit Profile Form State
   const [editName, setEditName] = useState(user.name);
   const [editUsername, setEditUsername] = useState(user.username);
@@ -95,29 +138,63 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
   const [editBio, setEditBio] = useState(user.bio || '');
   const [editAvatar, setEditAvatar] = useState(user.avatar);
 
-  // Quick Login / Register State
-  const [loginInput, setLoginInput] = useState('');
-  const [regName, setRegName] = useState('');
-  const [regUsername, setRegUsername] = useState('');
-  const [regSchool, setRegSchool] = useState('Trường THPT Số 1 Phan Đình Phùng');
-  const [regClass, setRegClass] = useState('Lớp 11A1');
-  const [regAvatar, setRegAvatar] = useState(AVATAR_PRESETS[0].url);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const openEditModal = () => {
+  // Bắt đầu quy trình xác thực để vào "Bảo mật thông tin cá nhân"
+  const requestAccessPersonalSecurity = (targetTab: 'profile' | 'security' = 'profile') => {
+    setProfileModalTab(targetTab);
+    setVerifyAccountInput(user.username);
+    setVerifyPasswordInput('');
+    setVerifyError(null);
+    setIsSecurityVerifyOpen(true);
+  };
+
+  // Xác thực tài khoản & mật khẩu để mở khóa thông tin cá nhân
+  const handleVerifySecurityAccess = (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError(null);
+
+    const cleanInputUser = verifyAccountInput.trim().toLowerCase().replace('@', '');
+    const currentClean = user.username.toLowerCase();
+
+    if (cleanInputUser !== currentClean && cleanInputUser !== user.email?.toLowerCase()) {
+      setVerifyError(`Tên tài khoản không khớp với hồ sơ hiện tại (@${user.username})!`);
+      return;
+    }
+
+    if (!verifyPasswordInput.trim()) {
+      setVerifyError('Vui lòng nhập mật khẩu tài khoản để xác minh danh tính!');
+      return;
+    }
+
+    const check = DatabaseService.verifyUserPassword(user.id, verifyPasswordInput);
+    if (!check.success) {
+      setVerifyError(check.error || 'Mật khẩu không chính xác! Không thể truy cập khu vực bảo mật thông tin cá nhân.');
+      return;
+    }
+
+    // Xác thực thành công -> Mở khóa và nạp dữ liệu vào form
     setEditName(user.name);
     setEditUsername(user.username);
     setEditSchool(user.school || 'Trường THPT Số 1 Phan Đình Phùng');
     setEditClass(user.className || 'Khối 11 - Đoàn Trường');
     setEditBio(user.bio || '');
     setEditAvatar(user.avatar);
+    setCurrentPasswordInput('');
+    setNewPasswordInput('');
+    setConfirmNewPasswordInput('');
+    setPasswordChangeError(null);
+    setPasswordChangeSuccess(null);
+
+    setIsSecurityVerifyOpen(false);
     setIsEditModalOpen(true);
+    showToast('🔓 Xác thực thành công! Đã mở quyền quản lý bảo mật thông tin cá nhân.');
   };
 
+  // Lưu thông tin cá nhân
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     const updated = DatabaseService.updateUserProfile({
@@ -132,36 +209,118 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
       onUserUpdate(updated);
     }
     setIsEditModalOpen(false);
-    showToast('✅ Đã cập nhật thông tin hồ sơ thành công!');
+    showToast('✅ Đã cập nhật thông tin cá nhân thành công!');
   };
 
-  const handleSwitchAccount = (accountId: string) => {
-    const updated = DatabaseService.switchAccount(accountId);
-    if (onUserUpdate) {
-      onUserUpdate(updated);
+  // Xử lý đổi mật khẩu
+  const handleChangePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError(null);
+    setPasswordChangeSuccess(null);
+
+    if (!currentPasswordInput.trim()) {
+      setPasswordChangeError('Vui lòng nhập mật khẩu hiện tại của bạn!');
+      return;
     }
-    setIsAuthModalOpen(false);
-    showToast(`🎉 Chào mừng trở lại, ${updated.name}!`);
+    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 3) {
+      setPasswordChangeError('Mật khẩu mới phải có ít nhất 3 ký tự!');
+      return;
+    }
+    if (newPasswordInput.trim() !== confirmNewPasswordInput.trim()) {
+      setPasswordChangeError('Mật khẩu xác nhận không trùng khớp!');
+      return;
+    }
+
+    const res = DatabaseService.changePassword(user.id, currentPasswordInput, newPasswordInput);
+    if (!res.success) {
+      setPasswordChangeError(res.error || 'Đổi mật khẩu thất bại!');
+      return;
+    }
+
+    setPasswordChangeSuccess('✅ Đã đổi mật khẩu bảo mật tài khoản thành công!');
+    setCurrentPasswordInput('');
+    setNewPasswordInput('');
+    setConfirmNewPasswordInput('');
+    showToast('🔒 Đổi mật khẩu tài khoản thành công!');
   };
 
+  // Chọn tài khoản để chuyển đổi -> mở popup nhập mật khẩu
+  const handleSelectSwitchAccount = (target: User) => {
+    if (target.id === user.id) return;
+    setSelectedSwitchUser(target);
+    const pwd = target.password || (target.role === 'admin' ? 'admin123' : '123456');
+    setSwitchPasswordInput(pwd);
+    setSwitchError(null);
+  };
+
+  // Xác nhận chuyển tài khoản có mật khẩu
+  const handleConfirmSwitchAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSwitchUser) return;
+    if (!switchPasswordInput.trim()) {
+      setSwitchError('Vui lòng nhập mật khẩu của tài khoản để đăng nhập!');
+      return;
+    }
+    const res = DatabaseService.switchAccountSecure(selectedSwitchUser.id, switchPasswordInput);
+    if (!res.success || !res.user) {
+      setSwitchError(res.error || 'Mật khẩu không chính xác! Không thể đăng nhập vào tài khoản này.');
+      return;
+    }
+    if (onUserUpdate) {
+      onUserUpdate(res.user);
+    }
+    setSelectedSwitchUser(null);
+    setIsAuthModalOpen(false);
+    showToast(`🎉 Chào mừng trở lại, ${res.user.name}!`);
+  };
+
+  // Đăng nhập trực tiếp bằng tên + mật khẩu
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginInput.trim()) return;
-    const updated = DatabaseService.login(loginInput.trim());
+    setAuthModalLoginError(null);
+    if (!loginInput.trim()) {
+      setAuthModalLoginError('Vui lòng nhập tên tài khoản hoặc email!');
+      return;
+    }
+    if (!loginPasswordInput.trim()) {
+      setAuthModalLoginError('Vui lòng nhập mật khẩu tài khoản!');
+      return;
+    }
+    const res = DatabaseService.loginSecure(loginInput.trim(), loginPasswordInput);
+    if (!res.success || !res.user) {
+      setAuthModalLoginError(res.error || 'Tài khoản hoặc mật khẩu không chính xác!');
+      return;
+    }
     if (onUserUpdate) {
-      onUserUpdate(updated);
+      onUserUpdate(res.user);
     }
     setIsAuthModalOpen(false);
     setLoginInput('');
-    showToast(`🎉 Đăng nhập thành công với tài khoản: ${updated.name}`);
+    setLoginPasswordInput('');
+    showToast(`🎉 Đăng nhập thành công với tài khoản: ${res.user.name}`);
   };
 
+  // Đăng ký tài khoản mới có mật khẩu
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName.trim()) return;
+    setRegError(null);
+    if (!regName.trim()) {
+      setRegError('Vui lòng nhập họ và tên của bạn!');
+      return;
+    }
+    if (!regPassword.trim() || regPassword.length < 3) {
+      setRegError('Mật khẩu phải có ít nhất 3 ký tự!');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Mật khẩu xác nhận không trùng khớp!');
+      return;
+    }
+    const cleanUsername = regUsername.trim() || `user_${Date.now().toString().slice(-4)}`;
     const updated = DatabaseService.registerUser({
       name: regName.trim(),
-      username: regUsername.trim() || `user_${Date.now().toString().slice(-4)}`,
+      username: cleanUsername,
+      password: regPassword.trim(),
       school: regSchool.trim(),
       className: regClass.trim(),
       avatar: regAvatar
@@ -172,6 +331,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
     setIsAuthModalOpen(false);
     setRegName('');
     setRegUsername('');
+    setRegPassword('');
+    setRegConfirmPassword('');
     showToast(`🌟 Chúc mừng ${updated.name} đã gia nhập TrustNet!`);
   };
 
@@ -216,9 +377,9 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                 <CheckCircle className="w-3.5 h-3.5 text-white" />
               </span>
               <button
-                onClick={openEditModal}
+                onClick={() => requestAccessPersonalSecurity('profile')}
                 className="absolute inset-0 bg-slate-950/60 rounded-3xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-xs font-semibold text-white transition-opacity gap-1"
-                title="Thay đổi ảnh đại diện"
+                title="Thay đổi ảnh đại diện (Yêu cầu mật khẩu)"
               >
                 <Camera className="w-5 h-5 text-cyan-300" />
                 <span>Đổi ảnh</span>
@@ -238,6 +399,10 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                     Admin
                   </span>
                 )}
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  Đã bảo mật
+                </span>
               </div>
 
               {/* School and Class Badges */}
@@ -283,11 +448,21 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
           <div className="flex flex-wrap lg:flex-col items-stretch gap-2.5 shrink-0 self-start lg:self-center border-t lg:border-t-0 lg:border-l border-slate-800/80 pt-4 lg:pt-0 lg:pl-6 w-full lg:w-auto">
             
             <button
-              onClick={openEditModal}
+              onClick={() => requestAccessPersonalSecurity('profile')}
               className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              title="Yêu cầu nhập đúng tài khoản và mật khẩu để mở"
             >
               <Edit3 className="w-4 h-4" />
               <span>Chỉnh sửa hồ sơ</span>
+            </button>
+
+            <button
+              onClick={() => requestAccessPersonalSecurity('security')}
+              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              title="Quản lý mật khẩu và an toàn tài khoản"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-200" />
+              <span>Bảo mật & Đổi MK</span>
             </button>
 
             <button
@@ -337,6 +512,79 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
           </div>
         </div>
 
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION: BẢO MẬT THÔNG TIN CÁ NHÂN & TÀI KHOẢN HỌC ĐƯỜNG      */}
+      {/* ============================================================ */}
+      <section className="glass-panel rounded-3xl p-6 md:p-8 space-y-5 text-slate-100 border border-slate-800 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shadow-glow-emerald">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-base md:text-lg font-bold text-white flex items-center gap-2 flex-wrap">
+                Bảo Mật Thông Tin Cá Nhân & Quyền Riêng Tư
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                  Bảo vệ mức cao
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                Chỉ người dùng nhập đúng tài khoản và mật khẩu mới được vào xem và chỉnh sửa thông tin cá nhân.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => requestAccessPersonalSecurity('profile')}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Xác thực vào thông tin cá nhân</span>
+            </button>
+            <button
+              onClick={() => requestAccessPersonalSecurity('security')}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 hover:border-amber-400 font-bold text-xs transition-all flex items-center gap-1.5"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Đổi mật khẩu</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3 Security Status Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300">Khóa tài khoản</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            </div>
+            <p className="text-sm font-black text-white font-mono">@{user.username}</p>
+            <span className="text-[11px] text-slate-400 block truncate">Liên kết email: {user.email || 'Học sinh TrustNet'}</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300">Cơ chế bảo vệ</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">Xác thực 100%</span>
+            </div>
+            <p className="text-sm font-black text-emerald-400">Yêu cầu đúng Mật khẩu</p>
+            <span className="text-[11px] text-slate-400 block">Ngăn chặn đổi thông tin trái phép và mạo danh</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300">Định danh học đường</span>
+              <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">Chính thức</span>
+            </div>
+            <p className="text-sm font-black text-cyan-300 truncate">{user.school || 'THPT Số 1 Phan Đình Phùng'}</p>
+            <span className="text-[11px] text-slate-400 block truncate">{user.className || 'Khối 11'} • Đã kích hoạt lá chắn số</span>
+          </div>
+        </div>
       </section>
 
       {/* Badges Showcase Section */}
@@ -454,7 +702,107 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
       </div>
 
       {/* ============================================================ */}
-      {/* MODAL 1: CHỈNH SỬA HỒ SƠ (EDIT PROFILE)                      */}
+      {/* MODAL 0: XÁC THỰC BẢO MẬT THÔNG TIN CÁ NHÂN                    */}
+      {/* (BẮT BUỘC NHẬP ĐÚNG TÀI KHOẢN VÀ MẬT KHẨU MỚI VÀO ĐƯỢC)      */}
+      {/* ============================================================ */}
+      {isSecurityVerifyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-indigo-500/50 p-6 md:p-8 shadow-2xl space-y-5 text-slate-100">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center border border-amber-500/30">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Xác thực bảo mật thông tin cá nhân</h3>
+                  <p className="text-xs text-slate-400">Phải nhập đúng tài khoản và mật khẩu để mở khóa</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSecurityVerifyOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifySecurityAccess} className="space-y-4">
+              {verifyError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-2 animate-in fade-in duration-200">
+                  <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{verifyError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  Tên tài khoản người dùng (@username) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={verifyAccountInput}
+                  onChange={(e) => setVerifyAccountInput(e.target.value)}
+                  placeholder="VD: hoangdinhdung822"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300">
+                    Mật khẩu cá nhân *
+                  </label>
+                  <span className="text-[10px] text-amber-300 font-mono">
+                    Mẫu: 123456 (Admin: admin123)
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showVerifyPassword ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={verifyPasswordInput}
+                    onChange={(e) => setVerifyPasswordInput(e.target.value)}
+                    placeholder="Nhập mật khẩu của bạn..."
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowVerifyPassword(!showVerifyPassword)}
+                    className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                  >
+                    {showVerifyPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsSecurityVerifyOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Xác nhận & Vào khu vực</span>
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 1: QUẢN LÝ & BẢO MẬT THÔNG TIN CÁ NHÂN                  */}
       {/* ============================================================ */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -464,11 +812,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                  <Edit3 className="w-5 h-5" />
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Chỉnh sửa hồ sơ cá nhân</h3>
-                  <p className="text-xs text-slate-400">Tùy biến tên, lớp học, trường học và avatar của bạn</p>
+                  <h3 className="text-lg font-bold text-white">Quản Lý & Bảo Mật Thông Tin Cá Nhân</h3>
+                  <p className="text-xs text-slate-400">Đã xác thực danh tính • Cho phép chỉnh sửa hồ sơ và đổi mật khẩu</p>
                 </div>
               </div>
               <button
@@ -479,156 +827,292 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
               </button>
             </div>
 
-            <form onSubmit={handleSaveProfile} className="space-y-5">
-              
-              {/* Avatar Selector */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-                  Chọn ảnh đại diện phong cách TrustNet
-                </label>
-                <div className="flex items-center gap-4 p-3 rounded-2xl bg-slate-950/60 border border-slate-800">
-                  <img
-                    src={editAvatar}
-                    alt="Preview"
-                    className="w-16 h-16 rounded-2xl object-cover ring-2 ring-indigo-500"
-                  />
-                  <div className="flex-1 space-y-1">
-                    <span className="text-xs font-bold text-white">Ảnh hiện tại</span>
-                    <input
-                      type="text"
-                      value={editAvatar}
-                      onChange={(e) => setEditAvatar(e.target.value)}
-                      placeholder="Hoặc dán URL ảnh trực tiếp..."
-                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-indigo-500"
+            {/* Sub-tabs inside Personal Security Modal */}
+            <div className="flex rounded-2xl bg-slate-950 p-1 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setProfileModalTab('profile')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  profileModalTab === 'profile'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Thông tin cá nhân</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileModalTab('security')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  profileModalTab === 'security'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Key className="w-3.5 h-3.5 text-amber-300" />
+                <span>Bảo mật & Đổi mật khẩu</span>
+              </button>
+            </div>
+
+            {/* TAB 1: EDIT PROFILE */}
+            {profileModalTab === 'profile' && (
+              <form onSubmit={handleSaveProfile} className="space-y-5">
+                
+                {/* Avatar Selector */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                    Chọn ảnh đại diện phong cách TrustNet
+                  </label>
+                  <div className="flex items-center gap-4 p-3 rounded-2xl bg-slate-950/60 border border-slate-800">
+                    <img
+                      src={editAvatar}
+                      alt="Preview"
+                      className="w-16 h-16 rounded-2xl object-cover ring-2 ring-indigo-500"
                     />
+                    <div className="flex-1 space-y-1">
+                      <span className="text-xs font-bold text-white">Ảnh hiện tại</span>
+                      <input
+                        type="text"
+                        value={editAvatar}
+                        onChange={(e) => setEditAvatar(e.target.value)}
+                        placeholder="Hoặc dán URL ảnh trực tiếp..."
+                        className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 pt-2">
+                    {AVATAR_PRESETS.map((preset, idx) => (
+                      <button
+                        type="button"
+                        key={idx}
+                        onClick={() => setEditAvatar(preset.url)}
+                        className={`relative rounded-xl overflow-hidden aspect-square border-2 transition-all ${
+                          editAvatar === preset.url
+                            ? 'border-cyan-400 scale-105 shadow-md shadow-cyan-500/30 ring-2 ring-cyan-400'
+                            : 'border-slate-800 hover:border-slate-600 opacity-70 hover:opacity-100'
+                        }`}
+                        title={preset.label}
+                      >
+                        <img src={preset.url} alt={preset.label} className="w-full h-full object-cover" />
+                        {editAvatar === preset.url && (
+                          <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center">
+                            <Check className="w-4 h-4 text-cyan-300 drop-shadow" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 pt-2">
-                  {AVATAR_PRESETS.map((preset, idx) => (
-                    <button
-                      type="button"
-                      key={idx}
-                      onClick={() => setEditAvatar(preset.url)}
-                      className={`relative rounded-xl overflow-hidden aspect-square border-2 transition-all ${
-                        editAvatar === preset.url
-                          ? 'border-cyan-400 scale-105 shadow-md shadow-cyan-500/30 ring-2 ring-cyan-400'
-                          : 'border-slate-800 hover:border-slate-600 opacity-70 hover:opacity-100'
-                      }`}
-                      title={preset.label}
-                    >
-                      <img src={preset.url} alt={preset.label} className="w-full h-full object-cover" />
-                      {editAvatar === preset.url && (
-                        <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center">
-                          <Check className="w-4 h-4 text-cyan-300 drop-shadow" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Name & Username */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    Họ và tên hiển thị *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    placeholder="VD: Hoàng Đình Dũng"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    Tên người dùng (@username) *
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">@</span>
+                {/* Name & Username */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">
+                      Họ và tên hiển thị *
+                    </label>
                     <input
                       type="text"
                       required
-                      value={editUsername}
-                      onChange={(e) => setEditUsername(e.target.value)}
-                      placeholder="hoangdinhdung822"
-                      className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="VD: Hoàng Đình Dũng"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">
+                      Tên người dùng (@username) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">@</span>
+                      <input
+                        type="text"
+                        required
+                        value={editUsername}
+                        onChange={(e) => setEditUsername(e.target.value)}
+                        placeholder="hoangdinhdung822"
+                        className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* School and Class */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">
+                      Trường học
+                    </label>
+                    <input
+                      type="text"
+                      value={editSchool}
+                      onChange={(e) => setEditSchool(e.target.value)}
+                      placeholder="Trường THPT Số 1 Phan Đình Phùng"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">
+                      Lớp / Khối / Đơn vị
+                    </label>
+                    <input
+                      type="text"
+                      value={editClass}
+                      onChange={(e) => setEditClass(e.target.value)}
+                      placeholder="Khối 11 - Đoàn Trường"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* School and Class */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Bio */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-300">
-                    Trường học
+                    Tiểu sử / Châm ngôn an toàn mạng
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    placeholder="Chia sẻ đôi điều về bạn và quan điểm chống tin giả..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
+                  >
+                    Lưu thay đổi
+                  </button>
+                </div>
+
+              </form>
+            )}
+
+            {/* TAB 2: CHANGE PASSWORD & SECURITY */}
+            {profileModalTab === 'security' && (
+              <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+                
+                {/* Security info card */}
+                <div className="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-indigo-300 font-bold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Bảo vệ tài khoản @{user.username}</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    Mật khẩu giúp bảo vệ lịch sử Fact-Check, điểm XP và thông tin học sinh của bạn khỏi việc bị người khác truy cập trái phép.
+                  </p>
+                </div>
+
+                {passwordChangeError && (
+                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{passwordChangeError}</span>
+                  </div>
+                )}
+
+                {passwordChangeSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{passwordChangeSuccess}</span>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">
+                    Mật khẩu hiện tại *
                   </label>
                   <input
-                    type="text"
-                    value={editSchool}
-                    onChange={(e) => setEditSchool(e.target.value)}
-                    placeholder="Trường THPT Số 1 Phan Đình Phùng"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    type="password"
+                    required
+                    value={currentPasswordInput}
+                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                    placeholder="Nhập mật khẩu đang dùng..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
                   />
                 </div>
 
                 <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300">
+                      Mật khẩu mới *
+                    </label>
+                    <span className="text-[10px] text-slate-400">Tối thiểu 3 ký tự</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      placeholder="Nhập mật khẩu mới..."
+                      className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-300">
-                    Lớp / Khối / Đơn vị
+                    Xác nhận mật khẩu mới *
                   </label>
                   <input
-                    type="text"
-                    value={editClass}
-                    onChange={(e) => setEditClass(e.target.value)}
-                    placeholder="Khối 11 - Đoàn Trường"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={confirmNewPasswordInput}
+                    onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
                   />
                 </div>
-              </div>
 
-              {/* Bio */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300">
-                  Tiểu sử / Châm ngôn an toàn mạng
-                </label>
-                <textarea
-                  rows={3}
-                  value={editBio}
-                  onChange={(e) => setEditBio(e.target.value)}
-                  placeholder="Chia sẻ đôi điều về bạn và quan điểm chống tin giả..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
-                />
-              </div>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>Lưu mật khẩu mới</span>
+                  </button>
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
-                >
-                  Lưu thay đổi
-                </button>
-              </div>
+              </form>
+            )}
 
-            </form>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
       {/* MODAL 2: ĐỔI TÀI KHOẢN & ĐĂNG NHẬP                           */}
+      {/* (BẮT BUỘC MẬT KHẨU MỚI VÀO ĐƯỢC)                             */}
       {/* ============================================================ */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -642,7 +1126,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">Quản lý Tài Khoản & Đăng Nhập</h3>
-                  <p className="text-xs text-slate-400">Chuyển đổi giữa các tài khoản hoặc đăng nhập tài khoản riêng của bạn</p>
+                  <p className="text-xs text-slate-400">Yêu cầu xác thực tài khoản và mật khẩu trước khi đăng nhập</p>
                 </div>
               </div>
               <button
@@ -664,7 +1148,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Chuyển nhanh tài khoản
+                Danh sách tài khoản
               </button>
               <button
                 type="button"
@@ -675,7 +1159,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Đăng nhập bằng tên
+                Đăng nhập bằng mật khẩu
               </button>
               <button
                 type="button"
@@ -690,16 +1174,17 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
               </button>
             </div>
 
-            {/* TAB 1: QUICK ACCOUNT SWITCHER */}
+            {/* TAB 1: QUICK ACCOUNT SWITCHER WITH PASSWORD PROMPT */}
             {authTab === 'switch' && (
               <div className="space-y-3">
                 <p className="text-xs text-slate-400">
-                  Chọn một tài khoản bên dưới để đăng nhập ngay mà không cần mật khẩu:
+                  Chọn tài khoản bên dưới và nhập đúng mật khẩu để chuyển đổi:
                 </p>
 
                 <div className="space-y-2.5">
                   {allAccounts.map((acc) => {
                     const isCurrent = acc.id === user.id;
+                    const pwd = acc.password || (acc.role === 'admin' ? 'admin123' : '123456');
                     return (
                       <div
                         key={acc.id}
@@ -716,7 +1201,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                             className="w-12 h-12 rounded-xl object-cover ring-2 ring-slate-700 shrink-0"
                           />
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="text-sm font-bold text-white truncate">{acc.name}</h4>
                               {isCurrent && (
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
@@ -728,6 +1213,9 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                                   Admin
                                 </span>
                               )}
+                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold">
+                                MK: {pwd}
+                              </span>
                             </div>
                             <span className="text-xs text-indigo-300 font-mono">@{acc.username}</span>
                             <div className="text-[11px] text-slate-400 truncate">
@@ -744,10 +1232,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleSwitchAccount(acc.id)}
-                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md hover:scale-105 active:scale-95"
+                              onClick={() => handleSelectSwitchAccount(acc)}
+                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md hover:scale-105 active:scale-95 flex items-center gap-1"
                             >
-                              Đăng nhập
+                              <Lock className="w-3 h-3" />
+                              <span>Đăng nhập</span>
                             </button>
                           )}
                         </div>
@@ -758,32 +1247,64 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
               </div>
             )}
 
-            {/* TAB 2: DIRECT LOGIN */}
+            {/* TAB 2: DIRECT LOGIN WITH IDENTIFIER & PASSWORD */}
             {authTab === 'login' && (
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Nhập Tên hoặc Tên đăng nhập (Username)
+                {authModalLoginError && (
+                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{authModalLoginError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">
+                    Tên tài khoản (@username) hoặc Email *
                   </label>
                   <input
                     type="text"
                     required
                     value={loginInput}
                     onChange={(e) => setLoginInput(e.target.value)}
-                    placeholder="VD: hoangdinhdung822 hoặc Hoàng Đình Dũng"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-400"
+                    placeholder="VD: hoangdinhdung822 hoặc baotram_digital"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400 font-mono"
                   />
-                  <p className="text-[11px] text-slate-400">
-                    💡 Mẹo: Bạn có thể nhập bất kỳ tên nào. Nếu đã từng đăng nhập hệ thống sẽ giữ lại thông tin, nếu chưa có sẽ tự động khởi tạo hồ sơ học sinh mới cho bạn!
-                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300">
+                      Mật khẩu tài khoản *
+                    </label>
+                    <span className="text-[10px] text-amber-300 font-mono">
+                      Mẫu: 123456 (Admin: admin123)
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showLoginModalPassword ? 'text' : 'password'}
+                      required
+                      value={loginPasswordInput}
+                      onChange={(e) => setLoginPasswordInput(e.target.value)}
+                      placeholder="Nhập mật khẩu..."
+                      className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginModalPassword(!showLoginModalPassword)}
+                      className="absolute right-3.5 top-2.5 text-slate-500 hover:text-slate-300"
+                    >
+                      {showLoginModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Đăng nhập ngay</span>
+                  <span>Xác thực & Đăng nhập</span>
                 </button>
               </form>
             )}
@@ -791,6 +1312,13 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
             {/* TAB 3: REGISTER NEW ACCOUNT */}
             {authTab === 'register' && (
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                {regError && (
+                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{regError}</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-300">Họ và tên *</label>
@@ -812,6 +1340,41 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
                       onChange={(e) => setRegUsername(e.target.value)}
                       placeholder="VD: an_genz"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">Mật khẩu bảo vệ *</label>
+                    <div className="relative">
+                      <input
+                        type={showRegPassword ? 'text' : 'password'}
+                        required
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Tối thiểu 3 ký tự"
+                        className="w-full pl-3 pr-9 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPassword(!showRegPassword)}
+                        className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
+                      >
+                        {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">Xác nhận mật khẩu *</label>
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      required
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
                     />
                   </div>
                 </div>
@@ -872,6 +1435,92 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) =
               </form>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* POPUP SUB-MODAL: XÁC THỰC MẬT KHẨU KHI CHUYỂN TÀI KHOẢN       */}
+      {/* ============================================================ */}
+      {selectedSwitchUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/40 p-5 space-y-4 shadow-2xl text-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <img
+                  src={selectedSwitchUser.avatar}
+                  alt={selectedSwitchUser.name}
+                  className="w-9 h-9 rounded-xl object-cover ring-2 ring-cyan-400/50"
+                />
+                <div>
+                  <h4 className="text-sm font-bold text-white leading-tight">{selectedSwitchUser.name}</h4>
+                  <span className="text-[11px] text-cyan-400 font-mono">@{selectedSwitchUser.username}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedSwitchUser(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmSwitchAccount} className="space-y-3.5">
+              <p className="text-xs text-slate-300">
+                Nhập mật khẩu của <strong className="text-white">@{selectedSwitchUser.username}</strong> để đăng nhập:
+              </p>
+
+              {switchError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{switchError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400">Mật khẩu *</span>
+                  <span className="text-amber-300 font-mono">
+                    Gợi ý: {selectedSwitchUser.role === 'admin' ? 'admin123' : '123456'}
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showSwitchPassword ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={switchPasswordInput}
+                    onChange={(e) => setSwitchPasswordInput(e.target.value)}
+                    placeholder="Nhập mật khẩu..."
+                    className="w-full pl-3 pr-9 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSwitchPassword(!showSwitchPassword)}
+                    className="absolute right-2.5 top-2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showSwitchPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSwitchUser(null)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Xác nhận đăng nhập</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

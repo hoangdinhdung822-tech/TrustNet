@@ -203,26 +203,13 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
           <div className="shrink-0 flex items-center gap-2">
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold border transition-all ${
-                hasGeminiKey
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-glow-emerald hover:bg-emerald-900/40'
-                  : 'bg-indigo-950/50 hover:bg-indigo-900/60 border-indigo-500/40 text-cyan-300 shadow-glow-sm'
-              }`}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 shadow-glow-emerald hover:bg-emerald-900/40 transition-all"
+              title="Google Gemini 3.8 Flash đã được tích hợp sẵn. Nhấn để xem cấu hình hoặc thêm API Key cá nhân nếu muốn."
             >
-              {hasGeminiKey ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Google {selectedModel}</span>
-                  <Settings className="w-3.5 h-3.5 text-slate-400 ml-1" />
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                  <span>Kết nối Gemini / Google AI</span>
-                  <Settings className="w-3.5 h-3.5 text-slate-400 ml-1" />
-                </>
-              )}
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Google Gemini 3.8 Flash • {hasGeminiKey ? 'Khóa riêng' : 'Sẵn sàng (Tích hợp sẵn)'}</span>
+              <Settings className="w-3.5 h-3.5 text-slate-400 ml-1" />
             </button>
           </div>
         </div>

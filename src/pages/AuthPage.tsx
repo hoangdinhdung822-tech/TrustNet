@@ -75,6 +75,7 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
   const [regName, setRegName] = useState('');
   const [regUsername, setRegUsername] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regSchool, setRegSchool] = useState('Trường THPT Số 1 Phan Đình Phùng');
   const [regClass, setRegClass] = useState('Lớp 11A1');
@@ -84,30 +85,52 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
 
   const initialAccounts = DatabaseService.getAllAccounts();
 
-  // Quick 1-click login handler
+  // Điền nhanh tài khoản mẫu để người dùng kiểm tra đăng nhập
   const handleQuickLogin = (acc: UserType) => {
-    const logged = DatabaseService.switchAccount(acc.id);
-    onLoginSuccess(logged);
+    setLoginIdentifier(acc.username);
+    const pwd = acc.password || (acc.role === 'admin' ? 'admin123' : '123456');
+    setLoginPassword(pwd);
+    setLoginError(null);
   };
 
-  // Submit Sign In
+  // Submit Sign In - BẮT BUỘC nhập đúng tài khoản và đúng mật khẩu
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
     if (!loginIdentifier.trim()) {
-      setLoginError('Vui lòng nhập tên người dùng hoặc email');
+      setLoginError('Vui lòng nhập tên người dùng (@username) hoặc email');
       return;
     }
-    const user = DatabaseService.login(loginIdentifier.trim(), loginPassword);
-    onLoginSuccess(user);
+    if (!loginPassword.trim()) {
+      setLoginError('Vui lòng nhập mật khẩu để bảo vệ thông tin cá nhân!');
+      return;
+    }
+    const res = DatabaseService.loginSecure(loginIdentifier.trim(), loginPassword);
+    if (!res.success || !res.user) {
+      setLoginError(res.error || 'Tài khoản hoặc mật khẩu không chính xác! Vui lòng kiểm tra lại.');
+      return;
+    }
+    onLoginSuccess(res.user);
   };
 
-  // Submit Sign Up
+  // Submit Sign Up - Bắt buộc mật khẩu & xác nhận mật khẩu
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setRegError(null);
     if (!regName.trim()) {
       setRegError('Vui lòng nhập họ và tên của bạn');
+      return;
+    }
+    if (!regPassword.trim()) {
+      setRegError('Vui lòng thiết lập mật khẩu để bảo vệ tài khoản cá nhân!');
+      return;
+    }
+    if (regPassword.length < 3) {
+      setRegError('Mật khẩu phải có độ dài từ 3 ký tự trở lên!');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Mật khẩu xác nhận không khớp! Vui lòng nhập lại chính xác.');
       return;
     }
     if (!regAgreed) {
@@ -119,7 +142,7 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
     const user = DatabaseService.registerUser({
       name: regName.trim(),
       username: cleanUsername,
-      password: regPassword,
+      password: regPassword.trim(),
       school: regSchool.trim() || 'Trường THPT Số 1 Phan Đình Phùng',
       className: regClass.trim() || 'Học sinh',
       avatar: regAvatar,
@@ -271,67 +294,77 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
                 
                 {/* 1-Click Fast Accounts */}
                 <div className="space-y-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                    Đăng nhập nhanh 1 chạm (Tài khoản mẫu):
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Tài khoản mẫu (Nhấp để điền mật khẩu):
+                    </span>
+                    <span className="text-[10px] text-cyan-400 font-medium">Bảo mật chuẩn</span>
+                  </div>
                   
                   <div className="space-y-2">
-                    {initialAccounts.slice(0, 3).map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => handleQuickLogin(acc)}
-                        className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 transition-all group text-left"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <img
-                            src={acc.avatar}
-                            alt={acc.name}
-                            className="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-700 group-hover:ring-cyan-400 shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-white group-hover:text-cyan-300 truncate">
-                                {acc.name}
-                              </span>
-                              {acc.role === 'admin' && (
-                                <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold">
-                                  Admin
+                    {initialAccounts.slice(0, 3).map((acc) => {
+                      const pwd = acc.password || (acc.role === 'admin' ? 'admin123' : '123456');
+                      return (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => handleQuickLogin(acc)}
+                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 transition-all group text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={acc.avatar}
+                              alt={acc.name}
+                              className="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-700 group-hover:ring-cyan-400 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-bold text-white group-hover:text-cyan-300 truncate">
+                                  {acc.name}
                                 </span>
-                              )}
+                                {acc.role === 'admin' && (
+                                  <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold">
+                                    Admin
+                                  </span>
+                                )}
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold">
+                                  MK: {pwd}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-mono block truncate">
+                                @{acc.username} • ⭐ {acc.points} XP
+                              </span>
                             </div>
-                            <span className="text-[10px] text-slate-400 font-mono block truncate">
-                              @{acc.username} • ⭐ {acc.points} XP
-                            </span>
                           </div>
-                        </div>
 
-                        <span className="text-xs font-semibold text-indigo-400 group-hover:text-cyan-300 flex items-center gap-1 shrink-0">
-                          Vào ngay <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                        </span>
-                      </button>
-                    ))}
+                          <span className="text-xs font-semibold text-indigo-400 group-hover:text-cyan-300 flex items-center gap-1 shrink-0">
+                            Chọn <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 <div className="relative flex items-center justify-center my-3">
                   <div className="border-t border-slate-800 w-full" />
-                  <span className="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase font-bold">
-                    Hoặc nhập tài khoản
+                  <span className="bg-slate-900 px-3 text-[11px] text-slate-400 uppercase font-bold">
+                    Xác thực tài khoản & Mật khẩu
                   </span>
                 </div>
 
                 {/* Form Input */}
                 <form onSubmit={handleLoginSubmit} className="space-y-3.5">
                   {loginError && (
-                    <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold">
-                      {loginError}
+                    <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-start gap-2 animate-in fade-in duration-200">
+                      <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span>{loginError}</span>
                     </div>
                   )}
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-300">
-                      Tên người dùng (@username) hoặc Email
+                      Tên người dùng (@username) hoặc Email *
                     </label>
                     <div className="relative">
                       <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -340,7 +373,7 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
                         required
                         value={loginIdentifier}
                         onChange={(e) => setLoginIdentifier(e.target.value)}
-                        placeholder="VD: hoangdinhdung822 hoặc Đình Dũng"
+                        placeholder="VD: hoangdinhdung822 hoặc baotram_digital"
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400 transition-colors"
                       />
                     </div>
@@ -349,19 +382,20 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-300">
-                        Mật khẩu
+                        Mật khẩu tài khoản *
                       </label>
-                      <span className="text-[10px] text-cyan-400 cursor-pointer hover:underline">
-                        Đăng nhập tự do không cần mật khẩu
+                      <span className="text-[10px] text-slate-400">
+                        Phải nhập đúng mật khẩu
                       </span>
                     </div>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                       <input
                         type={showLoginPassword ? 'text' : 'password'}
+                        required
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="Nhập mật khẩu (tùy chọn)"
+                        placeholder="Nhập mật khẩu (Mẫu: 123456 / Admin: admin123)"
                         className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400 transition-colors"
                       />
                       <button
@@ -454,25 +488,42 @@ export const AuthPage: React.FC<Props> = ({ onLoginSuccess, isDark, setIsDark })
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">
-                    Mật khẩu (Tùy chọn)
-                  </label>
-                  <div className="relative">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      Mật khẩu bảo mật *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showRegPassword ? 'text' : 'password'}
+                        required
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Tối thiểu 3 ký tự"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPassword(!showRegPassword)}
+                        className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                      >
+                        {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      Xác nhận mật khẩu *
+                    </label>
                     <input
                       type={showRegPassword ? 'text' : 'password'}
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Tạo mật khẩu cho tài khoản"
+                      required
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu"
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowRegPassword(!showRegPassword)}
-                      className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
-                    >
-                      {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
                   </div>
                 </div>
 

@@ -21,6 +21,7 @@ export const INITIAL_ACCOUNTS: User[] = [
     username: 'hoangdinhdung822',
     name: 'Hoàng Đình Dũng',
     email: 'hoangdinhdung822@gmail.com',
+    password: '123456',
     avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
     school: 'Trường THPT Số 1 Phan Đình Phùng',
     className: 'Khối 11 - Đoàn Trường',
@@ -64,6 +65,7 @@ export const INITIAL_ACCOUNTS: User[] = [
     username: 'baotram_digital',
     name: 'Bảo Trâm',
     email: 'baotram.tech@trustnet.vn',
+    password: '123456',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
     school: 'Trường THPT Số 1 Phan Đình Phùng',
     className: 'Lớp 11A2',
@@ -99,6 +101,7 @@ export const INITIAL_ACCOUNTS: User[] = [
     username: 'trustnet_admin',
     name: 'Quản Trị Viên TrustNet',
     email: 'admin@trustnet.vn',
+    password: 'admin123',
     avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=250&q=80',
     school: 'Ban Quản trị An toàn Thông tin TrustNet',
     className: 'Admin Desk',
@@ -855,7 +858,7 @@ const INITIAL_REPORTS: ReportItem[] = [
  * Service quản lý CSDL LocalStorage mô phỏng
  */
 export class DatabaseService {
-  // Lấy tất cả tài khoản
+  // Lấy tất cả tài khoản (đồng bộ mật khẩu mặc định nếu chưa có)
   public static getAllAccounts(): User[] {
     const raw = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
     if (!raw) {
@@ -866,8 +869,18 @@ export class DatabaseService {
       const accounts: User[] = JSON.parse(raw);
       let changed = false;
       for (const initAcc of INITIAL_ACCOUNTS) {
-        if (!accounts.some(a => a.id === initAcc.id || a.username === initAcc.username)) {
+        const found = accounts.find(a => a.id === initAcc.id || a.username === initAcc.username);
+        if (!found) {
           accounts.unshift(initAcc);
+          changed = true;
+        } else if (!found.password) {
+          found.password = initAcc.password;
+          changed = true;
+        }
+      }
+      for (const acc of accounts) {
+        if (!acc.password) {
+          acc.password = acc.role === 'admin' ? 'admin123' : '123456';
           changed = true;
         }
       }
@@ -895,7 +908,100 @@ export class DatabaseService {
     }
   }
 
-  // Chuyển đổi tài khoản (Switch User / Login as)
+  // Đăng nhập an toàn: bắt buộc đúng tài khoản và mật khẩu
+  public static loginSecure(identifier: string, password: string): { success: boolean; user?: User; error?: string } {
+    const cleanId = identifier.trim().toLowerCase().replace('@', '');
+    if (!cleanId) {
+      return { success: false, error: 'Vui lòng nhập tên người dùng hoặc email.' };
+    }
+    if (!password || !password.trim()) {
+      return { success: false, error: 'Vui lòng nhập mật khẩu tài khoản của bạn.' };
+    }
+
+    const accounts = this.getAllAccounts();
+    const found = accounts.find(a => 
+      a.username.toLowerCase() === cleanId || 
+      a.name.toLowerCase() === cleanId ||
+      a.email.toLowerCase() === cleanId
+    );
+
+    if (!found) {
+      return { 
+        success: false, 
+        error: 'Tài khoản không tồn tại trên hệ thống. Vui lòng kiểm tra lại hoặc chuyển sang tab "Tạo tài khoản mới"!' 
+      };
+    }
+
+    const expectedPassword = found.password || (found.role === 'admin' ? 'admin123' : '123456');
+    if (password.trim() !== expectedPassword.trim()) {
+      return { 
+        success: false, 
+        error: 'Mật khẩu không chính xác! Vui lòng thử lại. (Gợi ý tài khoản mẫu: 123456, Admin: admin123)' 
+      };
+    }
+
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    return { success: true, user: found };
+  }
+
+  // Chuyển đổi tài khoản có xác thực mật khẩu
+  public static switchAccountSecure(userId: string, password: string): { success: boolean; user?: User; error?: string } {
+    const accounts = this.getAllAccounts();
+    const found = accounts.find(a => a.id === userId);
+    if (!found) {
+      return { success: false, error: 'Không tìm thấy tài khoản.' };
+    }
+
+    const expectedPassword = found.password || (found.role === 'admin' ? 'admin123' : '123456');
+    if (password.trim() !== expectedPassword.trim()) {
+      return { success: false, error: 'Mật khẩu của tài khoản này không chính xác!' };
+    }
+
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    return { success: true, user: found };
+  }
+
+  // Kiểm tra xác thực mật khẩu tài khoản hiện tại (bảo vệ thông tin cá nhân)
+  public static verifyUserPassword(userId: string, password: string): { success: boolean; error?: string } {
+    const accounts = this.getAllAccounts();
+    const user = accounts.find(a => a.id === userId);
+    if (!user) {
+      return { success: false, error: 'Không tìm thấy tài khoản người dùng.' };
+    }
+    const expected = user.password || (user.role === 'admin' ? 'admin123' : '123456');
+    if (password.trim() !== expected.trim()) {
+      return { success: false, error: 'Mật khẩu xác thực không chính xác! Vui lòng nhập đúng mật khẩu.' };
+    }
+    return { success: true };
+  }
+
+  // Đổi mật khẩu tài khoản
+  public static changePassword(userId: string, currentPass: string, newPass: string): { success: boolean; error?: string } {
+    const accounts = this.getAllAccounts();
+    const user = accounts.find(a => a.id === userId);
+    if (!user) {
+      return { success: false, error: 'Không tìm thấy thông tin tài khoản.' };
+    }
+
+    const expected = user.password || (user.role === 'admin' ? 'admin123' : '123456');
+    if (currentPass.trim() !== expected.trim()) {
+      return { success: false, error: 'Mật khẩu hiện tại không đúng!' };
+    }
+
+    if (!newPass || newPass.trim().length < 3) {
+      return { success: false, error: 'Mật khẩu mới phải có ít nhất 3 ký tự.' };
+    }
+
+    user.password = newPass.trim();
+    const updatedAccounts = accounts.map(a => a.id === user.id ? user : a);
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(updatedAccounts));
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    return { success: true };
+  }
+
+  // Chuyển đổi tài khoản nhanh
   public static switchAccount(userId: string): User {
     const accounts = this.getAllAccounts();
     const found = accounts.find(a => a.id === userId);
@@ -907,27 +1013,16 @@ export class DatabaseService {
     return this.getCurrentUser();
   }
 
-  // Đăng nhập bằng username, email hoặc tên (hỗ trợ mật khẩu tùy chọn)
+  // Đăng nhập thường
   public static login(identifier: string, password?: string): User {
-    const accounts = this.getAllAccounts();
-    const clean = identifier.trim().toLowerCase().replace('@', '');
-    const found = accounts.find(a => 
-      a.username.toLowerCase() === clean || 
-      a.name.toLowerCase() === clean ||
-      a.email.toLowerCase() === clean
-    );
-    if (found) {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
-      localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-      return found;
+    const res = this.loginSecure(identifier, password || '123456');
+    if (res.success && res.user) {
+      return res.user;
     }
-    // Nếu chưa có trong danh sách, tự động tạo tài khoản học sinh mới
     return this.registerUser({
       name: identifier.trim(),
-      username: clean || 'user_' + Date.now().toString().slice(-4),
-      email: `${clean || 'user'}@trustnet.vn`,
-      school: 'Trường THPT Số 1 Phan Đình Phùng',
-      password: password
+      username: identifier.trim().toLowerCase().replace('@', ''),
+      password: password || '123456'
     });
   }
 

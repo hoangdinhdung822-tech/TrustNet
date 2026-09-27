@@ -48,7 +48,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
 
   // Gemini Settings State
   const [apiKey, setApiKey] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
   const [testState, setTestState] = useState<{ testing: boolean; message: string | null; success: boolean | null }>({
@@ -59,7 +59,12 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
 
   useEffect(() => {
     setApiKey(AiVerificationService.getGeminiApiKey() || '');
-    setSelectedModel(AiVerificationService.getGeminiModel());
+    let model = AiVerificationService.getGeminiModel();
+    if (model.includes('1.5') || model.includes('2.5')) {
+      model = 'gemini-3.8-flash';
+      AiVerificationService.setGeminiModel(model);
+    }
+    setSelectedModel(model);
   }, []);
 
   const hasGeminiKey = Boolean(apiKey && apiKey.trim().length > 0);
@@ -811,9 +816,9 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
               >
-                <option value="gemini-1.5-flash">gemini-1.5-flash (Khuyên dùng: Siêu nhanh, miễn phí & chính xác)</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash (Thế hệ mới nhất của Google)</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro (Tư duy suy luận sâu)</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Khuyên dùng: Mô hình thế hệ mới nhất của Google)</option>
+                <option value="gemini-3.8-pro">gemini-3.8-pro (Bản cao cấp suy luận chuyên sâu)</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash (Thế hệ 2.0)</option>
               </select>
             </div>
 

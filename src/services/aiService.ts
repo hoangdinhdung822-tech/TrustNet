@@ -30,7 +30,7 @@ const PHISHING_SIGNALS = [
 
 const GEMINI_API_KEY_STORAGE = 'trustnet_gemini_api_key';
 const GEMINI_MODEL_STORAGE = 'trustnet_gemini_model';
-const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
 export class AiVerificationService {
   /**
@@ -45,12 +45,16 @@ export class AiVerificationService {
    * Chuẩn hóa tên Model Gemini (xử lý dấu gạch ngang unicode en-dash/em-dash '–', khoảng trắng)
    */
   public static sanitizeModel(model?: string): string {
-    if (!model) return 'gemini-1.5-flash';
+    if (!model) return 'gemini-3.8-flash';
     let cleaned = model.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-').trim();
     if (cleaned.startsWith('models/')) {
       cleaned = cleaned.replace('models/', '');
     }
-    return cleaned || 'gemini-1.5-flash';
+    // Nếu model cũ đã ngưng hỗ trợ cho người dùng mới, tự nâng cấp lên gemini-3.8-flash
+    if (cleaned.includes('gemini-1.5') || cleaned.includes('gemini-2.5')) {
+      cleaned = 'gemini-3.8-flash';
+    }
+    return cleaned || 'gemini-3.8-flash';
   }
 
   /**
@@ -147,15 +151,36 @@ export class AiVerificationService {
         })
       });
 
-      // Nếu model bị 404 (not found / not supported), tự động truy vấn danh sách models của tài khoản này
-      if (!response.ok && response.status === 404) {
-        const available = await this.getAvailableModels(cleanKey);
-        if (available.length > 0) {
-          // Ưu tiên flash hoặc model đầu tiên
-          const fallback = available.find(m => m.includes('1.5-flash') || m.includes('2.0-flash') || m.includes('flash')) || available[0];
-          targetModel = fallback;
-          this.setGeminiModel(targetModel);
+      // Nếu lỗi 400 hoặc 404 (ví dụ model bị deprecated hoặc Google gợi ý model mới như gemini-3.8-flash)
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        let errMsg = errJson?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
 
+        // 1. Tự động kiểm tra xem Google có chỉ định rõ model thay thế không
+        const match = errMsg.match(/models\/(gemini-[0-9a-zA-Z\u2010-\u2015._-]+)/i);
+        if (match && match[1]) {
+          const suggestedModel = this.sanitizeModel(match[1]);
+          if (suggestedModel && suggestedModel !== targetModel) {
+            targetModel = suggestedModel;
+            this.setGeminiModel(targetModel);
+            endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  role: 'user',
+                  parts: [{ text: 'Ping test: Hãy trả lời "TrustNet AI Connected" trong 3 từ.' }]
+                }]
+              })
+            });
+          }
+        }
+
+        // 2. Nếu vẫn lỗi và chưa thử gemini-3.8-flash, thử ngay gemini-3.8-flash
+        if (!response.ok && targetModel !== 'gemini-3.8-flash') {
+          targetModel = 'gemini-3.8-flash';
+          this.setGeminiModel(targetModel);
           endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
           response = await fetch(endpoint, {
             method: 'POST',
@@ -168,15 +193,37 @@ export class AiVerificationService {
             })
           });
         }
-      }
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-        if (errMsg.includes('API_KEY_INVALID') || response.status === 400 || response.status === 403) {
-          return { success: false, message: 'Khóa API Key không hợp lệ hoặc chưa được kích hoạt trên Google AI Studio. Vui lòng kiểm tra lại mã key của bạn.' };
+        // 3. Nếu vẫn lỗi, truy vấn danh sách models khả dụng từ API
+        if (!response.ok) {
+          const available = await this.getAvailableModels(cleanKey);
+          for (const cand of available) {
+            if (cand === targetModel) continue;
+            targetModel = this.sanitizeModel(cand);
+            this.setGeminiModel(targetModel);
+            endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  role: 'user',
+                  parts: [{ text: 'Ping test: Hãy trả lời "TrustNet AI Connected" trong 3 từ.' }]
+                }]
+              })
+            });
+            if (response.ok) break;
+          }
         }
-        return { success: false, message: `Kết nối thất bại: ${errMsg}` };
+
+        if (!response.ok) {
+          const finalErr = await response.json().catch(() => ({}));
+          const finalMsg = finalErr?.error?.message || errMsg;
+          if (finalMsg.includes('API_KEY_INVALID') || response.status === 400 || response.status === 403) {
+            return { success: false, message: 'Khóa API Key không hợp lệ hoặc chưa được kích hoạt trên Google AI Studio. Vui lòng kiểm tra lại mã key của bạn.' };
+          }
+          return { success: false, message: `Kết nối thất bại: ${finalMsg}` };
+        }
       }
 
       const data = await response.json();
@@ -333,6 +380,31 @@ BẮT BUỘC TRẢ VỀ DƯỚI ĐỊNH DẠNG JSON DUY NHẤT KHÔNG KÈM MARKD
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(makePayload(false))
       });
+    }
+
+    // Nếu model bị lỗi (ví dụ 400 no longer available to new users hoặc 404), tự động kiểm tra model thay thế
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      const msg = errJson?.error?.message || '';
+      const match = msg.match(/models\/(gemini-[0-9a-zA-Z\u2010-\u2015._-]+)/i);
+      const suggestedModel = match && match[1] ? this.sanitizeModel(match[1]) : 'gemini-3.8-flash';
+      if (suggestedModel !== model) {
+        model = suggestedModel;
+        this.setGeminiModel(model);
+        endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(makePayload(true))
+        });
+        if (!response.ok) {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(makePayload(false))
+          });
+        }
+      }
     }
 
     if (!response.ok) {

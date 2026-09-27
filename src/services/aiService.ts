@@ -50,8 +50,8 @@ export class AiVerificationService {
     if (cleaned.startsWith('models/')) {
       cleaned = cleaned.replace('models/', '');
     }
-    // Nếu model cũ đã ngưng hỗ trợ cho người dùng mới, tự nâng cấp lên gemini-3.8-flash
-    if (cleaned.includes('gemini-1.5') || cleaned.includes('gemini-2.5')) {
+    // Nếu model cũ đã ngưng hỗ trợ cho người dùng mới (1.5, 2.0, 2.5), tự nâng cấp lên gemini-3.8-flash
+    if (cleaned.includes('1.5') || cleaned.includes('2.0') || cleaned.includes('2.5')) {
       cleaned = 'gemini-3.8-flash';
     }
     return cleaned || 'gemini-3.8-flash';

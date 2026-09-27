@@ -60,9 +60,9 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
   useEffect(() => {
     setApiKey(AiVerificationService.getGeminiApiKey() || '');
     let model = AiVerificationService.getGeminiModel();
-    if (model.includes('1.5') || model.includes('2.5')) {
+    if (!model || model.includes('1.5') || model.includes('2.0') || model.includes('2.5')) {
       model = 'gemini-3.8-flash';
-      AiVerificationService.setGeminiModel(model);
+      AiVerificationService.setGeminiModel('gemini-3.8-flash');
     }
     setSelectedModel(model);
   }, []);
@@ -808,9 +808,21 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
 
             {/* Model Selection */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-300 block">
-                Chọn phiên bản mô hình Gemini:
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Chọn phiên bản mô hình Gemini:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedModel('gemini-3.8-flash');
+                    AiVerificationService.setGeminiModel('gemini-3.8-flash');
+                  }}
+                  className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  ⚡ Đặt về gemini-3.8-flash
+                </button>
+              </div>
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}

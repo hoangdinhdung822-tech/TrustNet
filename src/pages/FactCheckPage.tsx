@@ -153,6 +153,9 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
     }
     setTestState({ testing: true, message: 'Đang gửi ping kiểm tra tới Google Gemini API...', success: null });
     const res = await AiVerificationService.testGeminiConnection(apiKey, selectedModel);
+    if (res.resolvedModel && res.resolvedModel !== selectedModel) {
+      setSelectedModel(res.resolvedModel);
+    }
     setTestState({ testing: false, message: res.message, success: res.success });
   };
 

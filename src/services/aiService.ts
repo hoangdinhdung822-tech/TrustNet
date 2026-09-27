@@ -34,15 +34,35 @@ const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
 
 export class AiVerificationService {
   /**
+   * Chuẩn hóa API Key (loại bỏ dấu ngoặc kép, khoảng trắng thừa)
+   */
+  public static sanitizeApiKey(key: string): string {
+    if (!key) return '';
+    return key.trim().replace(/^["']|["']$/g, '');
+  }
+
+  /**
+   * Chuẩn hóa tên Model Gemini (xử lý dấu gạch ngang unicode en-dash/em-dash '–', khoảng trắng)
+   */
+  public static sanitizeModel(model?: string): string {
+    if (!model) return 'gemini-1.5-flash';
+    let cleaned = model.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-').trim();
+    if (cleaned.startsWith('models/')) {
+      cleaned = cleaned.replace('models/', '');
+    }
+    return cleaned || 'gemini-1.5-flash';
+  }
+
+  /**
    * Lấy Gemini API Key từ localStorage hoặc biến môi trường
    */
   public static getGeminiApiKey(): string | null {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(GEMINI_API_KEY_STORAGE);
-      if (stored && stored.trim().length > 0) return stored.trim();
+      if (stored && stored.trim().length > 0) return this.sanitizeApiKey(stored);
     }
     const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    if (envKey && envKey.trim().length > 0) return envKey.trim();
+    if (envKey && envKey.trim().length > 0) return this.sanitizeApiKey(envKey);
     return null;
   }
 
@@ -51,10 +71,11 @@ export class AiVerificationService {
    */
   public static setGeminiApiKey(key: string): void {
     if (typeof window !== 'undefined') {
-      if (!key || key.trim().length === 0) {
+      const clean = this.sanitizeApiKey(key);
+      if (!clean) {
         localStorage.removeItem(GEMINI_API_KEY_STORAGE);
       } else {
-        localStorage.setItem(GEMINI_API_KEY_STORAGE, key.trim());
+        localStorage.setItem(GEMINI_API_KEY_STORAGE, clean);
       }
     }
   }
@@ -65,7 +86,7 @@ export class AiVerificationService {
   public static getGeminiModel(): string {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(GEMINI_MODEL_STORAGE);
-      if (stored) return stored;
+      if (stored) return this.sanitizeModel(stored);
     }
     return DEFAULT_GEMINI_MODEL;
   }
@@ -75,19 +96,47 @@ export class AiVerificationService {
    */
   public static setGeminiModel(model: string): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(GEMINI_MODEL_STORAGE, model);
+      localStorage.setItem(GEMINI_MODEL_STORAGE, this.sanitizeModel(model));
     }
   }
 
   /**
-   * Kiểm tra kết nối tới Google Gemini API
+   * Lấy danh sách các models được tài khoản Google AI hỗ trợ
    */
-  public static async testGeminiConnection(key: string, model?: string): Promise<{ success: boolean; message: string }> {
-    const targetModel = model || this.getGeminiModel();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key.trim()}`;
+  public static async getAvailableModels(key: string): Promise<string[]> {
+    try {
+      const cleanKey = this.sanitizeApiKey(key);
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (data.models && Array.isArray(data.models)) {
+        return data.models
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => m.name.replace('models/', ''));
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Kiểm tra kết nối tới Google Gemini API (có cơ chế tự động thử model khả dụng)
+   */
+  public static async testGeminiConnection(
+    key: string, 
+    model?: string
+  ): Promise<{ success: boolean; message: string; resolvedModel?: string }> {
+    const cleanKey = this.sanitizeApiKey(key);
+    if (!cleanKey) {
+      return { success: false, message: 'Vui lòng nhập API Key trước khi kiểm tra.' };
+    }
+
+    let targetModel = this.sanitizeModel(model || this.getGeminiModel());
+    let endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
 
     try {
-      const response = await fetch(endpoint, {
+      let response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,15 +147,45 @@ export class AiVerificationService {
         })
       });
 
+      // Nếu model bị 404 (not found / not supported), tự động truy vấn danh sách models của tài khoản này
+      if (!response.ok && response.status === 404) {
+        const available = await this.getAvailableModels(cleanKey);
+        if (available.length > 0) {
+          // Ưu tiên flash hoặc model đầu tiên
+          const fallback = available.find(m => m.includes('1.5-flash') || m.includes('2.0-flash') || m.includes('flash')) || available[0];
+          targetModel = fallback;
+          this.setGeminiModel(targetModel);
+
+          endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                role: 'user',
+                parts: [{ text: 'Ping test: Hãy trả lời "TrustNet AI Connected" trong 3 từ.' }]
+              }]
+            })
+          });
+        }
+      }
+
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
         const errMsg = errJson?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+        if (errMsg.includes('API_KEY_INVALID') || response.status === 400 || response.status === 403) {
+          return { success: false, message: 'Khóa API Key không hợp lệ hoặc chưa được kích hoạt trên Google AI Studio. Vui lòng kiểm tra lại mã key của bạn.' };
+        }
         return { success: false, message: `Kết nối thất bại: ${errMsg}` };
       }
 
       const data = await response.json();
       const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'OK';
-      return { success: true, message: `Kết nối thành công với Google ${targetModel}! (${reply.trim()})` };
+      return { 
+        success: true, 
+        message: `✅ Kết nối thành công với Google ${targetModel}! (${reply.trim()})`,
+        resolvedModel: targetModel 
+      };
     } catch (err: any) {
       return { success: false, message: `Lỗi kết nối mạng: ${err?.message || err}` };
     }
@@ -125,8 +204,8 @@ export class AiVerificationService {
       throw new Error('Chưa thiết lập Google Gemini API Key.');
     }
 
-    const model = this.getGeminiModel();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    let model = this.sanitizeModel(this.getGeminiModel());
+    let endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     if (onProgress) {
       onProgress(`🚀 Đang kết nối Google Gemini API (${model})...`);

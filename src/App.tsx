@@ -114,6 +114,7 @@ export function App() {
           {activeTab === 'profile' && (
             <ProfilePage
               user={currentUser}
+              onUserUpdate={handleUserUpdate}
             />
           )}
 

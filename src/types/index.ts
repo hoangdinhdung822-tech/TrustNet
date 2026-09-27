@@ -14,6 +14,9 @@ export interface User {
   scenariosCompletedCount: number;
   quizAccuracy: number;
   createdAt: string;
+  bio?: string;
+  school?: string;
+  className?: string;
 }
 
 export interface Badge {

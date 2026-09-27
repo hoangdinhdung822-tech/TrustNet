@@ -10,56 +10,120 @@ const STORAGE_KEYS = {
   LESSONS: 'trustnet_lessons',
   SCENARIOS: 'trustnet_scenarios',
   REPORTS: 'trustnet_reports',
+  ACCOUNTS: 'trustnet_accounts',
 };
 
+// Initial Accounts Collection
+export const INITIAL_ACCOUNTS: User[] = [
+  {
+    id: 'u-dung-01',
+    username: 'hoangdinhdung822',
+    name: 'Hoàng Đình Dũng',
+    email: 'hoangdinhdung822@gmail.com',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
+    school: 'Trường THPT Số 1 Phan Đình Phùng',
+    className: 'Khối 11 - Đoàn Trường',
+    bio: 'Học sinh THPT Số 1 Phan Đình Phùng đam mê an toàn số, công nghệ & AI kiểm chứng tin tức.',
+    points: 850,
+    role: 'user',
+    rankTitle: 'Người kiểm chứng (Fact Checker)',
+    badges: [
+      {
+        id: 'b-fact-checker',
+        name: 'Fact Checker',
+        icon: '🏅',
+        description: 'Đã thực hiện hơn 10 lượt kiểm chứng thông tin chính xác.',
+        isUnlocked: true,
+        unlockedAt: '2026-09-15'
+      },
+      {
+        id: 'b-cyber-guardian',
+        name: 'Cyber Guardian',
+        icon: '🛡️',
+        description: 'Vượt qua 5 tình huống an ninh mạng với độ chính xác trên 80%.',
+        isUnlocked: true,
+        unlockedAt: '2026-09-20'
+      },
+      {
+        id: 'b-school-rep',
+        name: 'Đại sứ THPT Số 1',
+        icon: '🏫',
+        description: 'Đại sứ lan tỏa văn hóa kiểm chứng tại THPT Số 1 Phan Đình Phùng.',
+        isUnlocked: true,
+        unlockedAt: '2026-09-22'
+      }
+    ],
+    factChecksCount: 18,
+    scenariosCompletedCount: 9,
+    quizAccuracy: 92,
+    createdAt: '2026-08-15'
+  },
+  {
+    id: 'u-genz-01',
+    username: 'baotram_digital',
+    name: 'Bảo Trâm',
+    email: 'baotram.tech@trustnet.vn',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+    school: 'Trường THPT Số 1 Phan Đình Phùng',
+    className: 'Lớp 11A2',
+    bio: 'Sống có phản biện, đọc có kiểm chứng. Thành viên CLB Truyền thông số.',
+    points: 450,
+    role: 'user',
+    rankTitle: 'Người kiểm chứng',
+    badges: [
+      {
+        id: 'b-fact-checker',
+        name: 'Fact Checker',
+        icon: '🏅',
+        description: 'Đã thực hiện hơn 10 lượt kiểm chứng thông tin chính xác.',
+        isUnlocked: true,
+        unlockedAt: '2026-09-15'
+      },
+      {
+        id: 'b-cyber-guardian',
+        name: 'Cyber Guardian',
+        icon: '🛡️',
+        description: 'Vượt qua 5 tình huống an ninh mạng với độ chính xác trên 80%.',
+        isUnlocked: true,
+        unlockedAt: '2026-09-20'
+      }
+    ],
+    factChecksCount: 12,
+    scenariosCompletedCount: 7,
+    quizAccuracy: 85,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'u-admin-01',
+    username: 'trustnet_admin',
+    name: 'Quản Trị Viên TrustNet',
+    email: 'admin@trustnet.vn',
+    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=250&q=80',
+    school: 'Ban Quản trị An toàn Thông tin TrustNet',
+    className: 'Admin Desk',
+    bio: 'Quản trị viên hệ thống TrustNet - Giám sát tin giả và điều phối an toàn mạng học đường.',
+    points: 2500,
+    role: 'admin',
+    rankTitle: 'Hiệp sĩ an toàn số (Digital Knight)',
+    badges: [
+      {
+        id: 'b-admin-shield',
+        name: 'Tổng Quản Trị',
+        icon: '👑',
+        description: 'Đặc quyền kiểm duyệt và điều hành nền tảng TrustNet.',
+        isUnlocked: true,
+        unlockedAt: '2026-07-01'
+      }
+    ],
+    factChecksCount: 120,
+    scenariosCompletedCount: 25,
+    quizAccuracy: 98,
+    createdAt: '2026-07-01'
+  }
+];
+
 // Initial Current User
-const DEFAULT_USER: User = {
-  id: 'u-genz-01',
-  username: 'baotram_digital',
-  name: 'Bảo Trâm',
-  email: 'baotram.tech@trustnet.vn',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-  points: 450,
-  role: 'user',
-  rankTitle: 'Người kiểm chứng',
-  badges: [
-    {
-      id: 'b-fact-checker',
-      name: 'Fact Checker',
-      icon: '🏅',
-      description: 'Đã thực hiện hơn 10 lượt kiểm chứng thông tin chính xác.',
-      isUnlocked: true,
-      unlockedAt: '2026-09-15'
-    },
-    {
-      id: 'b-cyber-guardian',
-      name: 'Cyber Guardian',
-      icon: '🛡️',
-      description: 'Vượt qua 5 tình huống an ninh mạng với độ chính xác trên 80%.',
-      isUnlocked: true,
-      unlockedAt: '2026-09-20'
-    },
-    {
-      id: 'b-source-hunter',
-      name: 'Source Hunter',
-      icon: '🔎',
-      description: 'Luôn tìm và đính kèm đường link chính thống khi đăng bài.',
-      isUnlocked: true,
-      unlockedAt: '2026-09-22'
-    },
-    {
-      id: 'b-digital-citizen',
-      name: 'Digital Citizen',
-      icon: '🎓',
-      description: 'Đạt mốc 1000 điểm kinh nghiệm an toàn số.',
-      isUnlocked: false
-    }
-  ],
-  factChecksCount: 12,
-  scenariosCompletedCount: 7,
-  quizAccuracy: 85,
-  createdAt: '2026-08-01'
-};
+const DEFAULT_USER: User = INITIAL_ACCOUNTS[0];
 
 // Initial Posts
 const INITIAL_POSTS: Post[] = [
@@ -790,14 +854,143 @@ const INITIAL_REPORTS: ReportItem[] = [
  * Service quản lý CSDL LocalStorage mô phỏng
  */
 export class DatabaseService {
+  // Lấy tất cả tài khoản
+  public static getAllAccounts(): User[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
+      return INITIAL_ACCOUNTS;
+    }
+    try {
+      const accounts: User[] = JSON.parse(raw);
+      let changed = false;
+      for (const initAcc of INITIAL_ACCOUNTS) {
+        if (!accounts.some(a => a.id === initAcc.id || a.username === initAcc.username)) {
+          accounts.unshift(initAcc);
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+      }
+      return accounts;
+    } catch {
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
+      return INITIAL_ACCOUNTS;
+    }
+  }
+
+  // Chuyển đổi tài khoản (Switch User / Login as)
+  public static switchAccount(userId: string): User {
+    const accounts = this.getAllAccounts();
+    const found = accounts.find(a => a.id === userId);
+    if (found) {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+      return found;
+    }
+    return this.getCurrentUser();
+  }
+
+  // Đăng nhập bằng username hoặc tên
+  public static login(username: string): User {
+    const accounts = this.getAllAccounts();
+    const clean = username.trim().toLowerCase().replace('@', '');
+    const found = accounts.find(a => a.username.toLowerCase() === clean || a.name.toLowerCase() === clean);
+    if (found) {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+      return found;
+    }
+    // Nếu chưa có trong danh sách, tạo nhanh tài khoản mới
+    return this.registerUser({
+      name: username.trim(),
+      username: clean || 'user_' + Date.now().toString().slice(-4),
+      email: `${clean || 'user'}@trustnet.vn`,
+      school: 'Trường THPT Số 1 Phan Đình Phùng'
+    });
+  }
+
+  // Đăng ký tài khoản mới
+  public static registerUser(data: Partial<User>): User {
+    const accounts = this.getAllAccounts();
+    const cleanUsername = data.username ? data.username.trim().replace('@', '').toLowerCase() : 'user_' + Date.now().toString().slice(-4);
+    const newUser: User = {
+      id: 'u-' + Date.now(),
+      username: cleanUsername,
+      name: data.name?.trim() || 'Người dùng mới',
+      email: data.email || `${cleanUsername}@trustnet.vn`,
+      avatar: data.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
+      school: data.school || 'Trường THPT Số 1 Phan Đình Phùng',
+      className: data.className || 'Học sinh',
+      bio: data.bio || 'Thành viên mới tham gia mạng xã hội kiểm chứng TrustNet.',
+      points: 150,
+      role: 'user',
+      rankTitle: 'Tân binh khởi đầu',
+      badges: [
+        {
+          id: 'b-welcome',
+          name: 'Gia nhập TrustNet',
+          icon: '🎉',
+          description: 'Chào mừng bạn đến với mạng xã hội kiểm chứng thông tin.',
+          isUnlocked: true,
+          unlockedAt: new Date().toISOString().split('T')[0]
+        }
+      ],
+      factChecksCount: 0,
+      scenariosCompletedCount: 0,
+      quizAccuracy: 100,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    const updated = [newUser, ...accounts.filter(a => a.username !== newUser.username)];
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
+    return newUser;
+  }
+
+  // Cập nhật thông tin cá nhân (Edit Profile)
+  public static updateUserProfile(updatedFields: Partial<User>): User {
+    const current = this.getCurrentUser();
+    const updated: User = {
+      ...current,
+      ...updatedFields
+    };
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
+
+    // Đồng bộ lại vào danh sách accounts
+    const accounts = this.getAllAccounts();
+    const updatedAccounts = accounts.map(a => a.id === updated.id ? updated : a);
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(updatedAccounts));
+
+    return updated;
+  }
+
+  // Đăng xuất (Chuyển sang tài khoản khách hoặc tài khoản mặc định)
+  public static logout(): User {
+    const accounts = this.getAllAccounts();
+    const fallback = accounts[0] || DEFAULT_USER;
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fallback));
+    return fallback;
+  }
+
   // Lấy User
   public static getCurrentUser(): User {
+    // Migration: nếu chưa nâng cấp v2 hoặc tài khoản cũ lưu Bảo Trâm thì chuyển sang Hoàng Đình Dũng
+    if (!localStorage.getItem('trustnet_user_v2')) {
+      localStorage.setItem('trustnet_user_v2', 'true');
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(DEFAULT_USER));
+      return DEFAULT_USER;
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.USER);
     if (!raw) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(DEFAULT_USER));
       return DEFAULT_USER;
     }
-    return JSON.parse(raw);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(DEFAULT_USER));
+      return DEFAULT_USER;
+    }
   }
 
   // Cập nhật điểm và huy hiệu cho User

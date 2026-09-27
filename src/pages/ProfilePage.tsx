@@ -29,6 +29,7 @@ import { AiStatusBadge } from '../components/AiStatusBadge';
 interface Props {
   user: User;
   onUserUpdate?: (user: User) => void;
+  onLogout?: () => void;
 }
 
 const AVATAR_PRESETS = [
@@ -66,7 +67,7 @@ const AVATAR_PRESETS = [
   },
 ];
 
-export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate }) => {
+export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate, onLogout }) => {
   const history = DatabaseService.getFactCheckHistory();
   const lessons = DatabaseService.getLessons();
   const scenarios = DatabaseService.getScenarios();
@@ -175,12 +176,14 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserUpdate }) => {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Bạn có muốn chuyển sang tài khoản mặc định hoặc đăng nhập tài khoản khác?')) {
-      const fallback = DatabaseService.logout();
-      if (onUserUpdate) {
+    if (window.confirm('Bạn có chắc chắn muốn đăng xuất khỏi TrustNet?')) {
+      DatabaseService.logout();
+      if (onLogout) {
+        onLogout();
+      } else if (onUserUpdate) {
+        const fallback = DatabaseService.getCurrentUser();
         onUserUpdate(fallback);
       }
-      showToast('Đã đăng xuất. Bạn có thể chọn hoặc đăng nhập tài khoản mới!');
     }
   };
 

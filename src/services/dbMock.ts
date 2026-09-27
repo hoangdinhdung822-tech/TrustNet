@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   SCENARIOS: 'trustnet_scenarios',
   REPORTS: 'trustnet_reports',
   ACCOUNTS: 'trustnet_accounts',
+  IS_LOGGED_IN: 'trustnet_is_logged_in',
 };
 
 // Initial Accounts Collection
@@ -880,32 +881,53 @@ export class DatabaseService {
     }
   }
 
+  // Kiểm tra trạng thái đã đăng nhập hay chưa
+  public static isLoggedIn(): boolean {
+    return localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN) === 'true';
+  }
+
+  // Cập nhật trạng thái đăng nhập
+  public static setLoggedIn(status: boolean): void {
+    if (status) {
+      localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.IS_LOGGED_IN);
+    }
+  }
+
   // Chuyển đổi tài khoản (Switch User / Login as)
   public static switchAccount(userId: string): User {
     const accounts = this.getAllAccounts();
     const found = accounts.find(a => a.id === userId);
     if (found) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+      localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
       return found;
     }
     return this.getCurrentUser();
   }
 
-  // Đăng nhập bằng username hoặc tên
-  public static login(username: string): User {
+  // Đăng nhập bằng username, email hoặc tên (hỗ trợ mật khẩu tùy chọn)
+  public static login(identifier: string, password?: string): User {
     const accounts = this.getAllAccounts();
-    const clean = username.trim().toLowerCase().replace('@', '');
-    const found = accounts.find(a => a.username.toLowerCase() === clean || a.name.toLowerCase() === clean);
+    const clean = identifier.trim().toLowerCase().replace('@', '');
+    const found = accounts.find(a => 
+      a.username.toLowerCase() === clean || 
+      a.name.toLowerCase() === clean ||
+      a.email.toLowerCase() === clean
+    );
     if (found) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(found));
+      localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
       return found;
     }
-    // Nếu chưa có trong danh sách, tạo nhanh tài khoản mới
+    // Nếu chưa có trong danh sách, tự động tạo tài khoản học sinh mới
     return this.registerUser({
-      name: username.trim(),
+      name: identifier.trim(),
       username: clean || 'user_' + Date.now().toString().slice(-4),
       email: `${clean || 'user'}@trustnet.vn`,
-      school: 'Trường THPT Số 1 Phan Đình Phùng'
+      school: 'Trường THPT Số 1 Phan Đình Phùng',
+      password: password
     });
   }
 
@@ -938,12 +960,14 @@ export class DatabaseService {
       factChecksCount: 0,
       scenariosCompletedCount: 0,
       quizAccuracy: 100,
-      createdAt: new Date().toISOString().split('T')[0]
+      createdAt: new Date().toISOString().split('T')[0],
+      password: data.password
     };
 
     const updated = [newUser, ...accounts.filter(a => a.username !== newUser.username)];
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(updated));
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
     return newUser;
   }
 
@@ -964,8 +988,9 @@ export class DatabaseService {
     return updated;
   }
 
-  // Đăng xuất (Chuyển sang tài khoản khách hoặc tài khoản mặc định)
+  // Đăng xuất (xóa cờ đăng nhập và trả về tài khoản mặc định)
   public static logout(): User {
+    localStorage.removeItem(STORAGE_KEYS.IS_LOGGED_IN);
     const accounts = this.getAllAccounts();
     const fallback = accounts[0] || DEFAULT_USER;
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fallback));

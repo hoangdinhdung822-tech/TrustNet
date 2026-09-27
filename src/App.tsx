@@ -11,11 +11,13 @@ import { ScenariosPage } from './pages/ScenariosPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { SchoolIntroPage } from './pages/SchoolIntroPage';
+import { AuthPage } from './pages/AuthPage';
 import { DatabaseService } from './services/dbMock';
 import { User } from './types';
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<User>(DatabaseService.getCurrentUser());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(DatabaseService.isLoggedIn());
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [isDark, setIsDark] = useState<boolean>(true);
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
@@ -32,6 +34,27 @@ export function App() {
   const handleUserUpdate = (updated: User) => {
     setCurrentUser({ ...updated });
   };
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    DatabaseService.logout();
+    setIsLoggedIn(false);
+  };
+
+  // Nếu người dùng chưa đăng nhập, bắt buộc hiển thị màn hình Đăng nhập / Tạo tài khoản
+  if (!isLoggedIn) {
+    return (
+      <AuthPage
+        onLoginSuccess={handleLoginSuccess}
+        isDark={isDark}
+        setIsDark={setIsDark}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-colors ${
@@ -54,6 +77,7 @@ export function App() {
         setIsDark={setIsDark}
         isAdminMode={isAdminMode}
         setIsAdminMode={setIsAdminMode}
+        onLogout={handleLogout}
       />
 
       {/* Main Layout Container */}
@@ -115,6 +139,7 @@ export function App() {
             <ProfilePage
               user={currentUser}
               onUserUpdate={handleUserUpdate}
+              onLogout={handleLogout}
             />
           )}
 

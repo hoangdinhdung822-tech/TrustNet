@@ -17,6 +17,7 @@ export interface User {
   bio?: string;
   school?: string;
   className?: string;
+  password?: string;
 }
 
 export interface Badge {

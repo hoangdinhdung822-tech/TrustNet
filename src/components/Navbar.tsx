@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Sparkles, Bell, Sun, Moon, Search, Award, CheckCircle } from 'lucide-react';
+import { ShieldCheck, Sparkles, Bell, Sun, Moon, Search, Award, CheckCircle, LogOut } from 'lucide-react';
 import { User } from '../types';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   setIsDark: (dark: boolean) => void;
   isAdminMode: boolean;
   setIsAdminMode: (admin: boolean) => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -19,6 +20,7 @@ export const Navbar: React.FC<Props> = ({
   setIsDark,
   isAdminMode,
   setIsAdminMode,
+  onLogout,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -169,6 +171,7 @@ export const Navbar: React.FC<Props> = ({
           <div 
             onClick={() => setActiveTab('profile')}
             className="cursor-pointer relative flex items-center justify-center p-0.5 rounded-full ring-2 ring-indigo-500/40 hover:ring-indigo-400 transition-all"
+            title={`Xem hồ sơ của ${user.name}`}
           >
             <img
               src={user.avatar}
@@ -177,6 +180,21 @@ export const Navbar: React.FC<Props> = ({
             />
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-950 rounded-full" />
           </div>
+
+          {/* Quick Logout Button */}
+          {onLogout && (
+            <button
+              onClick={() => {
+                if (window.confirm('Bạn có chắc chắn muốn đăng xuất tài khoản?')) {
+                  onLogout();
+                }
+              }}
+              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 transition-colors"
+              title="Đăng xuất khỏi TrustNet"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
 
         </div>
       </div>

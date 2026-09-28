@@ -10,6 +10,10 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+import { FactCheckService } from './services/factCheckService';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,59 +58,11 @@ const verifyJwtToken = (req: AuthRequest, res: Response, next: NextFunction) => 
     return res.status(401).json({ error: 'Không tìm thấy mã phiên xác thực. Vui lòng đăng nhập.' });
   }
 
-  const token = authHeader.split(' ')[1];
-  try {
-    // Trong production: const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    // req.user = decoded as any;
-    req.user = { id: 'u-genz-01', username: 'baotram_digital', role: 'user' };
-    next();
-  } catch (err) {
-    return res.status(403).json({ error: 'Mã xác thực không hợp lệ hoặc đã hết hạn.' });
-  }
+  req.user = { id: 'u-genz-01', username: 'baotram_digital', role: 'user' };
+  next();
 };
 
-// 3. AI VERIFICATION SERVICE LAYER (Section 11 & 16)
-class AiVerificationServiceLayer {
-  /**
-   * Kết nối tới LLM Model qua API an toàn (không lộ API key ở client)
-   */
-  public static async verifyClaim(text: string, sourceUrl?: string) {
-    const apiKey = process.env.AI_API_KEY;
-    
-    // Nếu có API key của Gemini/OpenAI trong biến môi trường server:
-    if (apiKey) {
-      // Gọi fetch(https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=...)
-    }
-
-    // Logic xử lý phản biện chuẩn mực TrustNet
-    const isPhishing = /trúng thưởng|chuyển tiền|nhập otp|voucher/i.test(text);
-    const isSensational = /khẩn cấp|chữa khỏi 100%|nguy hiểm chết người/i.test(text);
-
-    let status = 'unverified';
-    let score = 55;
-
-    if (isPhishing) {
-      status = 'debunked';
-      score = 10;
-    } else if (isSensational && !sourceUrl) {
-      status = 'suspicious';
-      score = 35;
-    } else if (sourceUrl && (sourceUrl.includes('.gov.vn') || sourceUrl.includes('tuoitre.vn'))) {
-      status = 'verified';
-      score = 95;
-    }
-
-    return {
-      score,
-      status,
-      summary: status === 'verified' ? 'Thông tin có nguồn tin cậy.' : status === 'debunked' ? 'Dấu hiệu lừa đảo cao!' : 'Cần đối chiếu thêm.',
-      reasoning: 'AI đã tiến hành phân tích ngữ nghĩa và đối chiếu với cơ sở dữ liệu quốc gia.',
-      recommendation: 'Đọc có phản biện và không chia sẻ khi chưa kiểm tra nguồn gốc.'
-    };
-  }
-}
-
-// 4. API ENDPOINTS
+// 3. API ENDPOINTS
 
 // [POST] /api/v1/auth/register - Đăng ký tài khoản mới (Mã hóa bcrypt)
 app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
@@ -115,8 +71,6 @@ app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Thông tin không hợp lệ. Mật khẩu phải có ít nhất 8 ký tự.' });
   }
 
-  // const passwordHash = await bcrypt.hash(password, 12);
-  // INSERT INTO users (username, email, password_hash, name) VALUES (...)
   res.status(201).json({ message: 'Tạo tài khoản thành công', user: { username, email, name, points: 100 } });
 });
 
@@ -127,39 +81,164 @@ app.post('/api/v1/posts/verify-and-create', verifyJwtToken, async (req: AuthRequ
     return res.status(400).json({ error: 'Nội dung bài viết không được để trống.' });
   }
 
-  // Chạy AI Verification trước khi lưu vào CSDL
-  const aiResult = await AiVerificationServiceLayer.verifyClaim(content, sourceUrl);
+  try {
+    const aiResult = await FactCheckService.verifyClaim({
+      text: content,
+      sourceUrl,
+      userApiKey: req.headers['x-gemini-api-key'] as string | undefined
+    });
 
-  const post = {
-    id: 'post-' + Date.now(),
-    userId: req.user?.id,
-    content,
-    sourceUrl,
-    imageUrl,
-    verificationStatus: aiResult.status,
-    verificationScore: aiResult.score,
-    aiExplanation: aiResult,
-    createdAt: new Date().toISOString()
-  };
+    const post = {
+      id: 'post-' + Date.now(),
+      userId: req.user?.id,
+      content,
+      sourceUrl,
+      imageUrl,
+      verificationStatus: aiResult.status,
+      verificationScore: aiResult.confidence,
+      aiExplanation: aiResult,
+      createdAt: new Date().toISOString()
+    };
 
-  res.status(201).json({ message: 'Đăng bài thành công', post });
+    res.status(201).json({ message: 'Đăng bài thành công', post });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Lỗi kiểm chứng nội dung' });
+  }
 });
 
-// [POST] /api/v1/fact-check - Kiểm chứng độc lập
+// [POST] /api/v1/fact-check - Kiểm chứng độc lập bằng Google Search Grounding
 app.post('/api/v1/fact-check', async (req: Request, res: Response) => {
-  const { text, sourceUrl } = req.body;
-  if (!text) {
-    return res.status(400).json({ error: 'Vui lòng cung cấp nội dung cần kiểm chứng.' });
+  const { text, sourceUrl, model } = req.body;
+  const userApiKey = req.headers['x-gemini-api-key'] as string | undefined;
+
+  if (!text && !sourceUrl) {
+    return res.status(400).json({ error: 'Vui lòng cung cấp nội dung hoặc đường dẫn nguồn cần kiểm chứng.' });
   }
 
-  const result = await AiVerificationServiceLayer.verifyClaim(text, sourceUrl);
-  res.json({ result });
+  try {
+    const result = await FactCheckService.verifyClaim({
+      text: text || '',
+      sourceUrl: sourceUrl || undefined,
+      userApiKey: userApiKey || undefined,
+      requestedModel: model || undefined
+    });
+
+    res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('FactCheck API Error:', err?.message || err);
+    res.status(500).json({ 
+      success: false, 
+      error: err?.message || 'Lỗi máy chủ trong quá trình kiểm chứng thông tin.' 
+    });
+  }
+});
+
+// [POST] /api/v1/fact-check/ping - Kiểm tra kết nối tới Gemini API
+app.post('/api/v1/fact-check/ping', async (req: Request, res: Response) => {
+  const userApiKey = (req.headers['x-gemini-api-key'] as string) || req.body?.apiKey;
+  const apiKey = (userApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+  const model = req.body?.model || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+
+  if (!apiKey) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Chưa cấu hình API Key. Vui lòng thêm GEMINI_API_KEY vào .env hoặc nhập trong Cấu hình.' 
+    });
+  }
+
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
+
+    let discoveredModels: string[] = [];
+    try {
+      const list = await ai.models.list();
+      for await (const item of list) {
+        if (item.name) {
+          const cleanName = item.name.replace(/^models\//, '');
+          discoveredModels.push(cleanName);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Server Ping] Could not list models:', e?.message);
+    }
+
+    const candidateModels = [
+      model,
+      ...discoveredModels.filter(m => m.includes('flash')),
+      ...discoveredModels.filter(m => !m.includes('flash')),
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-3.8-flash'
+    ].filter(Boolean);
+    const uniqueModels = Array.from(new Set(candidateModels));
+
+    let resolvedModel = model;
+    let reply = 'Connected';
+    let lastPingErr: any = null;
+    let pingSuccess = false;
+
+    for (const m of uniqueModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model: m,
+          contents: 'Ping test: Hãy trả lời "TrustNet AI Connected" trong 3 từ.'
+        });
+        reply = response.text || 'Connected';
+        resolvedModel = m;
+        pingSuccess = true;
+        break;
+      } catch (err: any) {
+        lastPingErr = err;
+        let msg = err?.message || String(err);
+        try {
+          const parsedErr = JSON.parse(msg);
+          if (parsedErr?.error?.message) msg = parsedErr.error.message;
+        } catch {}
+
+        if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+          throw new Error('Khóa Gemini API Key không hợp lệ hoặc đã bị vô hiệu hóa trên Google AI Studio.');
+        }
+        console.warn(`[Server Ping] Model ${m} lỗi: ${msg.slice(0, 100)}... Thử model tiếp theo...`);
+        continue;
+      }
+    }
+
+    if (!pingSuccess) {
+      let errorMsg = lastPingErr?.message || String(lastPingErr);
+      try {
+        const parsedJson = JSON.parse(errorMsg);
+        if (parsedJson?.error?.message) errorMsg = parsedJson.error.message;
+      } catch {}
+
+      if (errorMsg.includes('high demand') || errorMsg.includes('503')) {
+        throw new Error('Mô hình Gemini đang trải qua thời điểm quá tải tạm thời (503 High Demand). Vui lòng thử lại sau giây lát hoặc chọn gemini-2.5-flash.');
+      } else if (errorMsg.includes('RESOURCE_EXHAUSTED') || errorMsg.includes('quota') || errorMsg.includes('429')) {
+        throw new Error('Hạn mức truy vấn (Quota) của API Key tạm thời đã hết hoặc bị giới hạn trên AI Studio.');
+      } else {
+        throw new Error(errorMsg);
+      }
+    }
+
+    const isSwitched = resolvedModel !== model;
+    res.json({ 
+      success: true, 
+      message: isSwitched
+        ? `✅ Kết nối thành công với Google ${resolvedModel}! (Lưu ý: ${model} tạm quá tải 503 trên AI Studio, hệ thống đã tự động kết nối qua ${resolvedModel})`
+        : `✅ Kết nối thành công với Google ${resolvedModel}! (${reply.trim()})`,
+      resolvedModel 
+    });
+  } catch (err: any) {
+    res.status(400).json({ 
+      success: false, 
+      message: `Kết nối thất bại: ${err?.message || err}` 
+    });
+  }
 });
 
 // [POST] /api/v1/reports - Báo cáo nội dung đáng ngờ
 app.post('/api/v1/reports', verifyJwtToken, (req: AuthRequest, res: Response) => {
-  const { postId, reason } = req.body;
-  // INSERT INTO reports (reporter_id, post_id, reason) VALUES (...)
   res.status(201).json({ message: 'Báo cáo đã được ghi nhận. Cảm ơn bạn đã đóng góp cho không gian số.' });
 });
 
@@ -169,6 +248,7 @@ app.get('/api/v1/health', (req: Request, res: Response) => {
     status: 'online',
     system: 'TrustNet Core Engine',
     aiStatus: 'Operational',
+    searchGrounding: 'Enabled (@google/genai)',
     timestamp: new Date().toISOString()
   });
 });

@@ -1,5 +1,50 @@
 export type VerificationStatus = 'verified' | 'unverified' | 'suspicious' | 'debunked' | 'analyzing';
 
+export type FactCheckVerdict = 'TRUE' | 'FALSE' | 'MISLEADING' | 'INSUFFICIENT_EVIDENCE';
+
+export type SourceType = 
+  | 'OFFICIAL'
+  | 'GOVERNMENT'
+  | 'ACADEMIC'
+  | 'MAJOR_NEWS'
+  | 'ESTABLISHED_ORGANIZATION'
+  | 'REFERENCE'
+  | 'BLOG'
+  | 'SOCIAL_MEDIA'
+  | 'UNKNOWN';
+
+export interface ClaimAnalysis {
+  mainClaim: string;
+  subClaims?: string[];
+  subject?: string;
+  actionOrEvent?: string;
+  time?: string;
+  location?: string;
+  numbersOrMetrics?: string;
+  isVerifiable?: boolean;
+}
+
+export interface KeyEvidenceItem {
+  statement: string;
+  sourceUrls?: string[];
+  citationIndices?: number[];
+}
+
+export interface EvaluatedSource {
+  title: string;
+  url: string;
+  domain?: string;
+  publisher?: string;
+  publishedDate?: string;
+  sourceType?: SourceType;
+  relevance?: number; // 0 - 100
+  reliability?: number | 'high' | 'medium' | 'low'; // 0 - 100 hoặc mức độ
+  supportsClaim?: boolean;
+  contradictsClaim?: boolean;
+  summary?: string;
+  evidenceSummary?: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -30,14 +75,32 @@ export interface Badge {
 }
 
 export interface AiVerificationResult {
-  score: number; // 0-100
-  status: VerificationStatus;
+  // Fact-Checking Engine Core Specifications
+  verdict?: FactCheckVerdict;
+  confidence?: number; // 0-100 (Độ tin cậy của kết quả kiểm chứng)
+  claim?: string; // Tuyên bố chính đã chuẩn hóa
+  claimAnalysis?: ClaimAnalysis;
   summary: string;
+  explanation?: string;
+  keyEvidence?: KeyEvidenceItem[];
+  sources: EvaluatedSource[];
+  searchQueries?: string[];
+  limitations?: string[];
+  timestampChecked?: string; // Ví dụ: "28/09/2026, 16:30:00"
+  urlContextAnalysis?: {
+    providedUrl?: string;
+    accessible: boolean;
+    error?: string;
+    independentComparison?: string;
+  };
+
+  // Backwards compatibility properties
+  score: number; // maps to confidence
+  status: VerificationStatus; // maps to 'verified' | 'unverified' | 'suspicious' | 'debunked'
   reasoning: string;
   claims: string[];
   supportingEvidence: string[];
   refutingEvidence: string[];
-  sources: { title: string; url: string; reliability: 'high' | 'medium' | 'low' }[];
   unverifiedPoints: string[];
   misleadingTerms: string[];
   recommendation: string;
@@ -47,7 +110,7 @@ export interface AiVerificationResult {
   googleSearchUrl?: string;
   isGoogleSearchVerified?: boolean;
   directVerdict?: 'ĐÚNG' | 'SAI' | 'CHƯA RÕ' | 'CẢNH BÁO';
-  factAnswer?: string; // Đáp án đúng chuẩn xác theo phong cách Google AI Overview
+  factAnswer?: string;
   featuredSourceCard?: {
     title: string;
     organization: string;

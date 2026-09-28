@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Bot, 
   Search, 
@@ -11,26 +11,407 @@ import {
   FileText, 
   Link as LinkIcon, 
   Image as ImageIcon, 
-  ShieldCheck, 
   Loader2, 
-  ArrowRight, 
-  BookmarkCheck, 
-  Share2,
   Settings,
   Zap,
   Key,
   Eye,
   EyeOff,
-  Check,
   X,
   Globe,
-  ThumbsUp,
-  ThumbsDown
+  AlertTriangle,
+  Clock,
+  Calendar,
+  Layers
 } from 'lucide-react';
 import { AiVerificationService } from '../services/aiService';
 import { DatabaseService } from '../services/dbMock';
 import { AiVerificationResult, FactCheckRecord, User } from '../types';
 import { AiStatusBadge } from '../components/AiStatusBadge';
+
+interface FactCheckResultViewProps {
+  result: AiVerificationResult;
+  scrollToSource: (index: number) => void;
+}
+
+const FactCheckResultView: React.FC<FactCheckResultViewProps> = ({ result, scrollToSource }) => {
+  const confidence = result.confidence ?? result.score ?? 50;
+  const keyEvidence = result.keyEvidence ?? [];
+  const limitations = result.limitations ?? result.unverifiedPoints ?? [];
+  const searchQueries = result.searchQueries ?? result.googleSearchQueries ?? [];
+  const sources = result.sources ?? [];
+
+  return (
+    <section className="glass-panel rounded-3xl p-6 md:p-8 space-y-7 animate-in zoom-in-95 duration-200">
+      
+      {/* Top Header: BÁO CÁO KIỂM CHỨNG & VERDICT BADGE & SCORE */}
+      <div className="pb-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap text-xs font-bold uppercase tracking-wider text-slate-400">
+            <span className="flex items-center gap-1.5 text-indigo-400">
+              <Sparkles className="w-4 h-4" />
+              BÁO CÁO KIỂM CHỨNG
+            </span>
+            {result.modelUsed && (
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                <Zap className="w-3 h-3 text-cyan-400" />
+                {result.modelUsed}
+              </span>
+            )}
+            {result.timestampChecked && (
+              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Đã kiểm tra web tại: {result.timestampChecked}
+              </span>
+            )}
+          </div>
+
+          {/* [VERDICT BADGE] */}
+          <div className="flex items-center gap-3 pt-1">
+            <AiStatusBadge verdict={result.verdict} size="lg" showScore={false} />
+          </div>
+        </div>
+
+        {/* Confidence Score Gauge */}
+        <div className="flex items-center gap-4 bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shrink-0">
+          <div className="text-center pr-3 border-r border-slate-800">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              Mức độ tin cậy
+            </span>
+            <span className={`text-2xl md:text-3xl font-black font-mono ${
+              confidence >= 80 ? 'text-emerald-400' :
+              confidence >= 50 ? 'text-amber-400' :
+              confidence >= 30 ? 'text-orange-400' : 'text-slate-400'
+            }`}>
+              {confidence}<span className="text-xs font-normal text-slate-500">/100</span>
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400 max-w-[140px] leading-tight">
+            {confidence >= 80 
+              ? 'Độ tin cậy cao: Đã được nhiều nguồn uy tín xác thực'
+              : confidence >= 50
+              ? 'Độ tin cậy trung bình: Có căn cứ xác thực'
+              : 'Độ tin cậy thấp: Chưa đủ nguồn kiểm chứng'}
+          </div>
+        </div>
+      </div>
+
+      {/* Section 13: Xử lý chuyên biệt khi "CHƯA ĐỦ DỮ LIỆU" (INSUFFICIENT_EVIDENCE) */}
+      {result.verdict === 'INSUFFICIENT_EVIDENCE' && (
+        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-700/80 text-slate-200 space-y-3">
+          <div className="flex items-center gap-2 text-slate-300 font-extrabold text-sm uppercase tracking-wide">
+            <HelpCircle className="w-5 h-5 text-slate-400" />
+            <span>⚪ CHƯA ĐỦ DỮ LIỆU</span>
+          </div>
+          <p className="text-sm font-semibold text-slate-200">
+            TrustNet chưa tìm thấy đủ bằng chứng đáng tin cậy để xác minh hoàn toàn thông tin này.
+          </p>
+          <div className="text-xs text-slate-400 space-y-1.5 pt-1">
+            <div>• <strong>Lý do chưa thể kết luận:</strong> {result.explanation || result.summary}</div>
+            {limitations.length > 0 && (
+              <div>• <strong>Dữ liệu còn thiếu:</strong> {limitations.join('; ')}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* User-Provided URL Context Report (nếu có) */}
+      {result.urlContextAnalysis && (
+        <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-300 flex items-center gap-1.5">
+              <LinkIcon className="w-3.5 h-3.5 text-cyan-400" />
+              Đường dẫn nguồn người dùng đính kèm:
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              result.urlContextAnalysis.accessible 
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+            }`}>
+              {result.urlContextAnalysis.accessible ? '✓ Đã đọc & phân tích' : '✕ Không thể truy cập'}
+            </span>
+          </div>
+          <div className="text-xs font-mono text-cyan-300 break-all">
+            {result.urlContextAnalysis.providedUrl}
+          </div>
+          {result.urlContextAnalysis.error && (
+            <div className="text-xs text-rose-400">
+              {result.urlContextAnalysis.error}
+            </div>
+          )}
+          {result.urlContextAnalysis.independentComparison && (
+            <div className="text-[11px] text-slate-400 italic">
+              * {result.urlContextAnalysis.independentComparison}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section: CLAIM ĐƯỢC KIỂM TRA (Claim Extraction Decomposition) */}
+      <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+            CLAIM ĐƯỢC KIỂM TRA
+          </h3>
+          {result.claimAnalysis?.isVerifiable !== undefined && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+              {result.claimAnalysis.isVerifiable ? 'Có thể kiểm chứng' : 'Khó kiểm chứng'}
+            </span>
+          )}
+        </div>
+
+        <div className="text-sm md:text-base font-bold text-white bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
+          "{result.claim || result.summary}"
+        </div>
+
+        {/* Bóc tách các thành phần cấu trúc của Claim */}
+        {result.claimAnalysis && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+            {result.claimAnalysis.subject && (
+              <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase">Chủ thể</span>
+                <span className="text-slate-200 font-semibold">{result.claimAnalysis.subject}</span>
+              </div>
+            )}
+            {result.claimAnalysis.actionOrEvent && (
+              <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase">Hành động / Sự kiện</span>
+                <span className="text-slate-200 font-semibold">{result.claimAnalysis.actionOrEvent}</span>
+              </div>
+            )}
+            {result.claimAnalysis.time && (
+              <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase">Thời gian</span>
+                <span className="text-slate-200 font-semibold">{result.claimAnalysis.time}</span>
+              </div>
+            )}
+            {result.claimAnalysis.location && (
+              <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase">Địa điểm</span>
+                <span className="text-slate-200 font-semibold">{result.claimAnalysis.location}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Section: KẾT LUẬN & TRỰC DIỆN (Google AI Overview Style) */}
+      <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-950 border border-indigo-500/30 space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
+          <span className="text-cyan-400 text-lg font-bold">✦</span>
+          <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">
+            KẾT LUẬN & ĐÁP ÁN SỰ THẬT
+          </h3>
+        </div>
+
+        <p className="text-sm md:text-base text-slate-100 font-medium leading-relaxed">
+          {result.factAnswer || result.summary}
+        </p>
+
+        {result.explanation && result.explanation !== result.factAnswer && (
+          <p className="text-xs md:text-sm text-slate-300 leading-relaxed pt-1">
+            {result.explanation}
+          </p>
+        )}
+      </div>
+
+      {/* Section: BẰNG CHỨNG (Evidence Items with Clickable Citations) */}
+      <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
+        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <Layers className="w-4 h-4 text-cyan-400" />
+          BẰNG CHỨNG ĐÃ ĐỐI CHIẾU
+        </h3>
+
+        <div className="space-y-2.5">
+          {keyEvidence.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">Đang tổng hợp bằng chứng từ mạng Internet...</p>
+          ) : (
+            keyEvidence.map((ev, idx) => (
+              <div 
+                key={idx}
+                className="p-3 rounded-xl bg-slate-900/70 border border-slate-800/90 text-xs text-slate-200 flex items-start gap-2.5 leading-relaxed"
+              >
+                <span className="text-indigo-400 font-bold shrink-0 mt-0.5">•</span>
+                <div className="flex-1">
+                  <span>{ev.statement}</span>
+
+                  {/* Citations badges [1], [2] */}
+                  {ev.citationIndices && ev.citationIndices.length > 0 && (
+                    <span className="inline-flex items-center gap-1 ml-2">
+                      {ev.citationIndices.map((cIdx) => (
+                        <button
+                          key={cIdx}
+                          onClick={() => scrollToSource(cIdx)}
+                          className="px-1.5 py-0.5 rounded bg-indigo-500/20 hover:bg-cyan-500/30 text-cyan-300 hover:text-white border border-indigo-500/40 text-[10px] font-mono font-bold transition-all cursor-pointer"
+                          title={`Xem nguồn số [${cIdx}]`}
+                        >
+                          [{cIdx}]
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Section: NGUỒN ĐÃ KIỂM TRA (Source Cards) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Globe className="w-4 h-4 text-cyan-400" />
+            NGUỒN ĐÃ KIỂM TRA ({sources.length} NGUỒN THỰC TẾ)
+          </h3>
+          <span className="text-[10px] text-slate-400">
+            Nguồn được trích xuất trực tiếp từ Google Search Grounding
+          </span>
+        </div>
+
+        {sources.length === 0 ? (
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 italic">
+            Không thu thập được đủ nguồn web độc lập qua Google Search Grounding.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {sources.map((source, idx) => {
+              const citationIndex = idx + 1;
+              return (
+                <div
+                  id={`source-card-${citationIndex}`}
+                  key={idx}
+                  className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between space-y-3 group shadow-lg"
+                >
+                  <div className="space-y-2">
+                    {/* Source Header: Citation Index + SourceType Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold text-xs">
+                        [{citationIndex}]
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-cyan-300">
+                        {source.sourceType || 'UNKNOWN'}
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors line-clamp-2">
+                      {source.title}
+                    </h4>
+
+                    {/* Publisher & Domain */}
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span className="truncate">{source.publisher || source.domain}</span>
+                      {source.domain && <span className="text-slate-600">•</span>}
+                      {source.domain && <span className="font-mono text-slate-400">{source.domain}</span>}
+                    </div>
+
+                    {/* Published Date if available */}
+                    {source.publishedDate && (
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{source.publishedDate}</span>
+                      </div>
+                    )}
+
+                    {/* Why this source matters / Summary */}
+                    {(source.summary || source.evidenceSummary) && (
+                      <p className="text-[11px] text-slate-300 leading-snug line-clamp-3 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/80">
+                        <strong className="text-cyan-400">Ý nghĩa: </strong>{source.summary || source.evidenceSummary}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Footer: Stance & Open Source Link */}
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      {source.contradictsClaim && (
+                        <span className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> Phản bác claim
+                        </span>
+                      )}
+                      {source.supportsClaim && (
+                        <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Hỗ trợ claim
+                        </span>
+                      )}
+                      {!source.contradictsClaim && !source.supportsClaim && (
+                        <span className="text-[10px] text-slate-400">Nguồn tham chiếu</span>
+                      )}
+                    </div>
+
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-cyan-400 hover:text-white font-semibold transition-colors group/link"
+                    >
+                      <span>Mở nguồn</span>
+                      <ExternalLink className="w-3.5 h-3.5 group-hover/link:translate-x-0.5 transition-transform" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Section: TRUY VẤN ĐÃ SỬ DỤNG (Search Queries) */}
+      <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <Search className="w-3.5 h-3.5 text-cyan-400" />
+          TRUY VẤN ĐÃ SỬ DỤNG TRÊN GOOGLE SEARCH
+        </span>
+        <div className="flex flex-wrap gap-2 pt-1">
+          {searchQueries.map((query, idx) => (
+            <a
+              key={idx}
+              href={`https://www.google.com/search?q=${encodeURIComponent(query)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-500/50 text-cyan-300 hover:text-white text-xs font-mono transition-all group"
+              title="Nhấn để tìm kiếm truy vấn này trực tiếp trên Google"
+            >
+              <span>🔍 "{query}"</span>
+              <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-cyan-400" />
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* Section: GIỚI HẠN KIỂM CHỨNG & THỜI ĐIỂM (Limitations) */}
+      <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          GIỚI HẠN KIỂM CHỨNG
+        </span>
+        <div className="text-xs text-slate-400 space-y-1">
+          {limitations.length > 0 ? (
+            limitations.map((lim, idx) => (
+              <p key={idx}>• {lim}</p>
+            ))
+          ) : (
+            <p>• Báo cáo phản ánh thông tin tính đến thời điểm tra cứu ({result.timestampChecked || 'vừa xong'}).</p>
+          )}
+          {result.timestampChecked && (
+            <p className="text-[11px] text-cyan-300 pt-1 font-mono">
+              • Đã kiểm tra web tại: {result.timestampChecked}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Recommendation Box */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 text-xs md:text-sm text-indigo-200">
+        <span className="font-bold text-cyan-300">💡 Lời khuyên công dân số: </span>
+        {result.recommendation}
+      </div>
+
+    </section>
+  );
+};
 
 interface Props {
   user: User;
@@ -44,11 +425,12 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState('');
   const [result, setResult] = useState<AiVerificationResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [simulatedImageName, setSimulatedImageName] = useState<string | null>(null);
 
   // Gemini Settings State
-  const [apiKey, setApiKey] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
+  const [apiKey, setApiKey] = useState<string>(() => AiVerificationService.getGeminiApiKey() || '');
+  const [selectedModel, setSelectedModel] = useState<string>(() => AiVerificationService.getGeminiModel() || 'gemini-2.5-flash');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
   const [testState, setTestState] = useState<{ testing: boolean; message: string | null; success: boolean | null }>({
@@ -57,54 +439,44 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
     success: null
   });
 
-  useEffect(() => {
-    setApiKey(AiVerificationService.getGeminiApiKey() || '');
-    let model = AiVerificationService.getGeminiModel();
-    if (!model || model.includes('1.5') || model.includes('2.0') || model.includes('2.5')) {
-      model = 'gemini-3.8-flash';
-      AiVerificationService.setGeminiModel('gemini-3.8-flash');
-    }
-    setSelectedModel(model);
-  }, []);
-
   const hasGeminiKey = Boolean(apiKey && apiKey.trim().length > 0);
 
-  // Sample Presets for Gen Z and Students to try immediately
+  // Sample Presets for Gen Z and Students to test immediately
   const samplePresets = [
     {
-      label: 'Thủ tướng Phạm Minh Chính (Ảnh mẫu)',
-      text: 'mai là ngày sinh của thủ tướng phạm minh chính',
+      label: 'Wat Pho Thái Lan (TEST 3)',
+      text: 'Chùa Wat Pho là cây cầu nổi tiếng của Thái Lan',
       url: ''
     },
     {
-      label: 'Ca sĩ Mỹ Tâm (Live Web)',
-      text: 'mai là ngày sinh của ca sĩ Mỹ Tâm',
+      label: 'Thủ đô Việt Nam là Hà Nội (TEST 1)',
+      text: 'Thủ đô của Việt Nam là Hà Nội.',
       url: ''
     },
     {
-      label: 'Sơn Tùng M-TP (Live Web)',
-      text: 'mai là ngày sinh của ca sĩ Sơn Tùng M-TP',
+      label: 'Thủ đô là TP.HCM (TEST 2)',
+      text: 'Thủ đô của Việt Nam là Thành phố Hồ Chí Minh.',
       url: ''
     },
     {
-      label: 'Sinh nhật Bác Hồ',
-      text: 'Mai là ngày sinh của Bác Hồ',
+      label: 'Claim mơ hồ khó kiểm chứng (TEST 4)',
+      text: 'Vào năm 1742, người ngoài hành tinh đã bí mật ký hiệp ước với các nhà giả kim thuật tại châu Âu.',
       url: ''
     },
     {
-      label: 'Địa lý: Tháp Eiffel (Live Web)',
-      text: 'Tháp Eiffel nằm ở Paris có đúng không',
+      label: 'Thông tin một phần đúng (TEST 5)',
+      text: 'Cà rốt chứa vitamin A giúp mắt sáng và chữa khỏi 100% bệnh cận thị trong 1 tuần.',
+      url: ''
+    },
+    {
+      label: 'Thời sự mới nhất (TEST 6)',
+      text: 'Thời tiết hiện nay tại Hà Nội đang có nhiệt độ khoảng bao nhiêu độ C?',
       url: ''
     },
     {
       label: 'Lừa đảo trúng thưởng',
       text: 'Chúc mừng bạn đã trúng 50.000.000 VNĐ. Nhấn vào link http://nhanthuong-50trieu.gift-claim.xyz để nhận tiền.',
       url: 'http://nhanthuong-50trieu.gift-claim.xyz'
-    },
-    {
-      label: 'Sức khỏe giật gân',
-      text: 'Uống nước chanh sả gừng lúc sáng sớm chữa khỏi 100% mọi biến thể cúm mùa và virus mới mà không cần tới bệnh viện!',
-      url: ''
     }
   ];
 
@@ -113,15 +485,16 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
 
     setIsAnalyzing(true);
     setResult(null);
+    setErrorMessage(null);
 
     try {
-      const fullText = inputText || `Kiểm tra địa chỉ website: ${sourceUrl}`;
+      const fullText = inputText || `Kiểm tra nội dung tại địa chỉ: ${sourceUrl}`;
       const res = await AiVerificationService.verifyContent(fullText, sourceUrl, (step) => {
         setAnalysisStep(step);
       });
       setResult(res);
 
-      // Save to Fact-Check history & award XP
+      // Lưu lịch sử kiểm chứng & cộng điểm XP
       const record: FactCheckRecord = {
         id: 'fc-' + Date.now(),
         userId: user.id,
@@ -133,8 +506,13 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
       DatabaseService.saveFactCheckRecord(record);
       onUserUpdate(DatabaseService.getCurrentUser());
 
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Fact-check failure:', err);
+      const msg = err?.message || 'Có lỗi xảy ra trong quá trình kiểm chứng thông tin.';
+      setErrorMessage(msg);
+      if (msg.includes('API_KEY') || msg.includes('GEMINI_API_KEY')) {
+        setIsSettingsOpen(true);
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -144,22 +522,20 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
     setInputText(preset.text);
     setSourceUrl(preset.url);
     setResult(null);
+    setErrorMessage(null);
   };
 
   const handleSimulateImageUpload = () => {
     setSimulatedImageName('screenshot_tinnhan_fb.png');
-    setInputText('Hệ thống OCR nhận diện văn bản từ ảnh: "Cảnh báo khẩn cấp: Nhập mã OTP để nhận 5 triệu đồng hỗ trợ sinh viên nghèo từ quỹ khuyến học trực tuyến"');
+    setInputText('Hệ thống OCR trích xuất: "Wat Pho là cây cầu dây văng lớn nhất nối liền hai bờ sông Chao Phraya ở Thái Lan."');
   };
 
   const handleTestConnection = async () => {
-    if (!apiKey.trim()) {
-      setTestState({ testing: false, message: 'Vui lòng nhập API Key trước khi kiểm tra.', success: false });
-      return;
-    }
-    setTestState({ testing: true, message: 'Đang gửi ping kiểm tra tới Google Gemini API...', success: null });
+    setTestState({ testing: true, message: 'Đang gửi kiểm tra tới Google Gemini qua máy chủ...', success: null });
     const res = await AiVerificationService.testGeminiConnection(apiKey, selectedModel);
     if (res.resolvedModel && res.resolvedModel !== selectedModel) {
       setSelectedModel(res.resolvedModel);
+      AiVerificationService.setGeminiModel(res.resolvedModel);
     }
     setTestState({ testing: false, message: res.message, success: res.success });
   };
@@ -176,6 +552,17 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
     setTestState({ testing: false, message: null, success: null });
   };
 
+  const scrollToSource = (index: number) => {
+    const el = document.getElementById(`source-card-${index}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-cyan-400');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-cyan-400');
+      }, 1800);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-20 md:pb-8">
       
@@ -187,28 +574,27 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2">
               <Bot className="w-4 h-4" />
-              <span>AI Fact Check Engine & Google Search Grounding</span>
+              <span>Hệ Thống Fact-Checking Chuyên Sâu • Google Search Grounding</span>
             </div>
 
             <h1 className="text-2xl md:text-3xl font-extrabold text-white">
-              Kiểm Chứng Tính Xác Thực Bằng AI & Google
+              Kiểm Chứng Tính Xác Thực Đa Nguồn Bằng AI
             </h1>
             <p className="text-xs md:text-sm text-slate-300 mt-2 leading-relaxed">
-              Dán một đoạn văn, một câu nói, đường link bài báo hoặc hình ảnh bạn còn nghi ngờ.
-              Trợ lý AI tự động nhờ <strong>Google Search</strong> tra cứu và đối chiếu với dữ liệu thời gian thực trên mạng Internet để xác minh tính chính xác, phát hiện tin giả và lừa đảo.
+              Nhập nội dung, bài báo hoặc đường link cần kiểm tra. Hệ thống kích hoạt <strong>Google Search Grounding</strong> để truy xuất dữ liệu độc lập thời gian thực, bóc tách luận điểm, đối chiếu bằng chứng và cung cấp trích dẫn nguồn thực tế.
             </p>
           </div>
 
-          {/* Gemini AI Status Pill & Config Button */}
+          {/* Model Status & Config Button */}
           <div className="shrink-0 flex items-center gap-2">
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 shadow-glow-emerald hover:bg-emerald-900/40 transition-all"
-              title="Google Gemini 3.8 Flash đã được tích hợp sẵn. Nhấn để xem cấu hình hoặc thêm API Key cá nhân nếu muốn."
+              title="Google Search Grounding đang kích hoạt. Nhấn để xem cấu hình hoặc thêm API Key."
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Google Gemini 3.8 Flash • {hasGeminiKey ? 'Khóa riêng' : 'Sẵn sàng (Tích hợp sẵn)'}</span>
+              <span>Google Gemini ({selectedModel}) • {hasGeminiKey ? 'Khóa riêng' : 'Server Default'}</span>
               <Settings className="w-3.5 h-3.5 text-slate-400 ml-1" />
             </button>
           </div>
@@ -248,7 +634,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
         {/* Presets Chips */}
         <div className="space-y-1.5">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            Thử nhanh các tình huống mẫu:
+            Thử nhanh các tình huống thực tế:
           </span>
           <div className="flex flex-wrap gap-2">
             {samplePresets.map((preset, idx) => (
@@ -269,7 +655,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Dán nội dung bài đăng Facebook, tin đồn TikTok, phát ngôn hoặc thông tin bạn muốn kiểm tra vào đây..."
-            rows={5}
+            rows={4}
             className="w-full px-4 py-3 rounded-2xl bg-slate-950/80 border border-slate-800 focus:border-indigo-500 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none transition-all resize-none font-sans"
           />
 
@@ -301,18 +687,31 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
           />
         </div>
 
+        {/* Error Alert if any */}
+        {errorMessage && (
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-start justify-between gap-3 animate-in fade-in">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block mb-0.5">Không thể hoàn tất kiểm chứng:</span>
+                <span>{errorMessage}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-rose-900/60 hover:bg-rose-800/80 text-rose-200 font-bold shrink-0 text-[11px] border border-rose-500/30"
+            >
+              Mở Cấu hình
+            </button>
+          </div>
+        )}
+
         {/* Submit Button & Model Status indicator */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
           <div className="text-xs text-slate-400 flex items-center gap-1.5">
-            {hasGeminiKey ? (
-              <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                <Zap className="w-3.5 h-3.5" /> Chế độ Google Gemini ({selectedModel}) đang sẵn sàng
-              </span>
-            ) : (
-              <span>
-                * Chế độ AI Demo Heuristics. Bạn có thể bấm <strong onClick={() => setIsSettingsOpen(true)} className="text-indigo-400 cursor-pointer underline">Kết nối Gemini</strong> để phân tích trực tiếp với Google AI!
-              </span>
-            )}
+            <span className="text-cyan-400 font-semibold flex items-center gap-1">
+              <Globe className="w-3.5 h-3.5 text-cyan-400" /> Google Search Grounding trực tiếp • Đối chiếu nguồn độc lập
+            </span>
           </div>
 
           <button
@@ -323,7 +722,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
             {isAnalyzing ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Đang quét dữ liệu...</span>
+                <span>Đang quét Google Search...</span>
               </>
             ) : (
               <>
@@ -347,9 +746,9 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
           </div>
 
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-white">AI đang phân tích & đối soát chéo...</h3>
+            <h3 className="text-base font-bold text-white">TrustNet AI Fact-Checking Engine đang phân tích...</h3>
             <p className="text-xs text-indigo-300 font-mono">
-              {analysisStep || (hasGeminiKey ? 'Đang gửi dữ liệu phân tích tới Google Gemini API...' : 'Đang kết nối kho dữ liệu báo chí chính thống & cổng an toàn thông tin')}
+              {analysisStep || 'Đang kết nối Google Search Grounding để đối soát dữ liệu trên mạng Internet...'}
             </p>
           </div>
 
@@ -359,366 +758,9 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
         </section>
       )}
 
-      {/* Section 4: Detailed AI Fact Check Results */}
+      {/* DETAILED FACT-CHECK RESULTS (Theo chuẩn Section 12 & 13) */}
       {result && !isAnalyzing && (
-        <section className="glass-panel rounded-3xl p-6 md:p-8 space-y-6 animate-in zoom-in-95 duration-200">
-          
-          {/* Top Result Banner */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-            
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap text-xs font-bold uppercase tracking-wider text-slate-400">
-                <span className="flex items-center gap-1.5 text-indigo-400">
-                  <Sparkles className="w-4 h-4" />
-                  Báo cáo kiểm chứng kết luận
-                </span>
-                {result.modelUsed && (
-                  <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-300 border border-indigo-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-cyan-400" />
-                    {result.modelUsed}
-                  </span>
-                )}
-              </div>
-              <h2 className="text-xl md:text-2xl font-black text-white">
-                {result.summary}
-              </h2>
-            </div>
-
-            {/* Score Gauge & Status Pill */}
-            <div className="flex items-center gap-4 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800">
-              <div className="text-center pr-3 border-r border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Độ tin cậy</span>
-                <span className={`text-2xl font-black font-mono ${
-                  result.score >= 80 ? 'text-emerald-400' :
-                  result.score >= 50 ? 'text-amber-400' :
-                  result.score >= 30 ? 'text-orange-400' : 'text-rose-400'
-                }`}>
-                  {result.score}<span className="text-xs font-normal text-slate-500">/100</span>
-                </span>
-              </div>
-              <AiStatusBadge status={result.status} score={result.score} size="lg" />
-            </div>
-
-          </div>
-
-          {/* GOOGLE AI OVERVIEW COMPONENT - "✦ Thông tin tổng quan do AI tạo & Đáp án sự thật" */}
-          <div className="rounded-3xl p-5 md:p-6 bg-gradient-to-br from-slate-900/90 via-indigo-950/40 to-slate-950 border border-indigo-500/30 shadow-xl relative overflow-hidden space-y-4">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Header: Sparkle + Title + Direct Verdict Badge */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <span className="text-cyan-400 text-xl font-bold animate-pulse">✦</span>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-indigo-200 to-cyan-300 font-extrabold text-sm md:text-base">
-                  Thông tin tổng quan do AI tạo
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
-                  Google Search AI Overview
-                </span>
-              </div>
-
-              {result.directVerdict && (
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase flex items-center gap-1.5 shadow-sm ${
-                    result.directVerdict === 'ĐÚNG'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : result.directVerdict === 'SAI'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                      : result.directVerdict === 'CẢNH BÁO'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                  }`}>
-                    {result.directVerdict === 'ĐÚNG' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                    {result.directVerdict === 'SAI' && <XCircle className="w-3.5 h-3.5 text-rose-400" />}
-                    {result.directVerdict === 'CẢNH BÁO' && <AlertCircle className="w-3.5 h-3.5 text-amber-400" />}
-                    {result.directVerdict === 'CHƯA RÕ' && <HelpCircle className="w-3.5 h-3.5 text-blue-400" />}
-                    <span>KẾT LUẬN: {result.directVerdict}</span>
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Fact Answer & Side Official Source Card */}
-            <div className="flex flex-col lg:flex-row items-stretch gap-5 pt-1">
-              <div className="flex-1 space-y-3">
-                <p className="text-sm md:text-base text-slate-100 leading-relaxed font-normal">
-                  {result.factAnswer || result.reasoning}
-                </p>
-
-                {/* Subtext Warning & Action Buttons like Google AI Overview */}
-                <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400 pt-3 border-t border-slate-800/80">
-                  <span className="flex items-center gap-1.5 text-slate-400 italic">
-                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    AI có thể mắc sai sót. Vì vậy, hãy luôn xác minh câu trả lời với tài liệu chính thống.
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <button 
-                      type="button"
-                      title="Hữu ích"
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors"
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      type="button"
-                      title="Chưa chính xác"
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors"
-                    >
-                      <ThumbsDown className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      type="button"
-                      title="Chia sẻ kết quả"
-                      onClick={() => {
-                        if (navigator.share) {
-                          navigator.share({ title: 'TrustNet AI Fact Check', text: result.factAnswer || result.summary, url: window.location.href });
-                        }
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Side Source Card - Trích xuất nguồn chính thức */}
-              {result.featuredSourceCard && (
-                <a
-                  href={result.featuredSourceCard.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="lg:w-80 shrink-0 p-4 rounded-2xl bg-slate-950/90 border border-indigo-500/30 hover:border-cyan-400/60 transition-all group flex flex-col justify-between space-y-2 shadow-xl hover:shadow-cyan-500/10"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                      <span className="truncate">{result.featuredSourceCard.organization}</span>
-                    </div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors line-clamp-2">
-                      {result.featuredSourceCard.title}
-                    </h4>
-                    <p className="text-[11px] text-slate-300 leading-snug line-clamp-3">
-                      {result.featuredSourceCard.snippet}
-                    </p>
-                  </div>
-                  <div className="pt-2 flex items-center justify-between text-[11px] text-indigo-400 border-t border-slate-800 font-medium">
-                    <span>Xem văn bản đối chiếu</span>
-                    <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </a>
-              )}
-            </div>
-
-          </div>
-
-          {/* Claims, Evidence & Unverified Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Tuyên bố chính */}
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                Tuyên bố chính trong nội dung (Claims)
-              </h3>
-              <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
-                {result.claims.map((claim, idx) => (
-                  <li key={idx} className="leading-snug">{claim}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Bằng chứng hỗ trợ hoặc mâu thuẫn */}
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-              {result.supportingEvidence.length > 0 ? (
-                <>
-                  <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    Bằng chứng hỗ trợ
-                  </h3>
-                  <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
-                    {result.supportingEvidence.map((ev, idx) => (
-                      <li key={idx}>{ev}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <XCircle className="w-4 h-4 text-rose-400" />
-                    Bằng chứng mâu thuẫn / Bác bỏ
-                  </h3>
-                  <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
-                    {result.refutingEvidence.map((ev, idx) => (
-                      <li key={idx}>{ev}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-
-            {/* Điểm chưa thể xác minh */}
-            {result.unverifiedPoints.length > 0 && (
-              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <HelpCircle className="w-4 h-4 text-amber-400" />
-                  Điểm chưa thể xác minh
-                </h3>
-                <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
-                  {result.unverifiedPoints.map((p, idx) => (
-                    <li key={idx}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Từ ngữ gây hiểu lầm */}
-            {result.misleadingTerms.length > 0 && (
-              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-                <h3 className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-orange-400" />
-                  Từ ngữ có dấu hiệu gây hiểu lầm / Thao túng
-                </h3>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {result.misleadingTerms.map((term, idx) => (
-                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-orange-500/10 text-orange-300 border border-orange-500/20 text-xs font-medium">
-                      "{term}"
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-          </div>
-
-          {/* Google Search Live Grounding & Internet Verification Box */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-950/40 via-slate-900 to-indigo-950/40 border border-blue-500/30 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-500/20">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  <Globe className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    Đối chiếu & Kiểm chứng thực tế từ Google Search trên Internet
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Hệ thống AI tự động tra cứu dữ liệu web thời gian thực để đối soát tính xác thực của tuyên bố
-                  </p>
-                </div>
-              </div>
-              <div>
-                {result.isGoogleSearchVerified ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    Google Search Live Grounding ⚡
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-semibold">
-                    <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                    Đối chiếu dữ liệu trực tuyến Google
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Từ khóa Google đã tra cứu */}
-            {result.googleSearchQueries && result.googleSearchQueries.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5 text-cyan-400" />
-                  Từ khóa AI tạo để đối soát trên Google:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {result.googleSearchQueries.map((query, idx) => (
-                    <a
-                      key={idx}
-                      href={`https://www.google.com/search?q=${encodeURIComponent(query)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-950/80 border border-slate-700 hover:border-cyan-500/50 text-cyan-300 hover:text-white text-xs font-mono transition-all group"
-                      title="Nhấn để tìm kiếm truy vấn này trực tiếp trên Google"
-                    >
-                      <span>🔍 "{query}"</span>
-                      <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-cyan-400" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Danh sách kết quả web tìm thấy từ Google Grounding (nếu có) */}
-            {result.googleGroundingSources && result.googleGroundingSources.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  Tài liệu & Bài viết được Google xác thực trên mạng:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {result.googleGroundingSources.map((gSource, idx) => (
-                    <a
-                      key={idx}
-                      href={gSource.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-blue-500/40 text-slate-300 hover:text-white text-xs transition-all group"
-                    >
-                      <span className="truncate pr-2 font-medium">{gSource.title}</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Nút kiểm tra chéo 1-chạm trên Google */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950/50 p-3 rounded-xl border border-slate-800/80">
-              <p className="text-xs text-slate-400 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Bạn muốn tự tay xem kết quả trực tiếp từ hàng triệu trang web trên Google?</span>
-              </p>
-              <a
-                href={result.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(inputText.slice(0, 80))}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] shrink-0"
-              >
-                <Search className="w-3.5 h-3.5" />
-                <span>Mở Google tìm kiếm trực tiếp nội dung này</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </div>
-
-          {/* Sources List */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-              🌐 Nguồn tham khảo chính thống để tự đối chiếu:
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {result.sources.map((s, idx) => (
-                <a
-                  key={idx}
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-indigo-500/50 text-slate-200 hover:text-white transition-all group"
-                >
-                  <span className="text-xs font-medium truncate pr-2">{s.title}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                </a>
-              ))}
-            </div>
-          </div>
-
-          {/* Recommendation Box */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 text-xs md:text-sm text-indigo-200">
-            <span className="font-bold text-cyan-300">💡 Lời khuyên công dân số: </span>
-            {result.recommendation}
-          </div>
-
-        </section>
+        <FactCheckResultView result={result} scrollToSource={scrollToSource} />
       )}
 
       {/* Gemini Settings Modal */}
@@ -733,7 +775,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">Cấu hình Google Gemini AI</h3>
-                  <p className="text-xs text-slate-400">Kết nối trực tiếp trí tuệ nhân tạo của Google & Google Search</p>
+                  <p className="text-xs text-slate-400">Kết nối máy chủ kiểm chứng với Google Search Grounding</p>
                 </div>
               </div>
               <button
@@ -748,8 +790,8 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
             <div className="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-500/20 text-xs text-blue-200 flex items-start gap-2.5">
               <Globe className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-cyan-300 block mb-0.5">Tích hợp Google Search Grounding:</span>
-                Khi kết nối Gemini, AI tự động nhờ Google tìm kiếm và đối chiếu với các bài viết, tin tức mới nhất trên mạng Internet để xác minh tính chính xác trước khi phản hồi.
+                <span className="font-bold text-cyan-300 block mb-0.5">Google Search Grounding kích hoạt:</span>
+                Hệ thống tự động sử dụng Google Search để tìm kiếm và đối chiếu với các bài viết thực tế trên mạng Internet trước khi kết luận.
               </div>
             </div>
 
@@ -777,7 +819,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                     setApiKey(e.target.value);
                     setTestState({ testing: false, message: null, success: null });
                   }}
-                  placeholder="AIzaSy..."
+                  placeholder="AIzaSy... (hoặc để trống nếu server đã có .env)"
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
                 />
                 <button
@@ -789,7 +831,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 </button>
               </div>
               <p className="text-[11px] text-slate-500">
-                * Khóa API được lưu cục bộ an toàn trên trình duyệt của bạn (LocalStorage) và không gửi đi bất kỳ bên thứ ba nào.
+                * Khóa API được gửi an toàn tới endpoint máy chủ để thực hiện truy vấn và không bao giờ xuất hiện trong mã nguồn client.
               </p>
             </div>
 
@@ -802,12 +844,12 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedModel('gemini-3.8-flash');
-                    AiVerificationService.setGeminiModel('gemini-3.8-flash');
+                    setSelectedModel('gemini-2.5-flash');
+                    AiVerificationService.setGeminiModel('gemini-2.5-flash');
                   }}
                   className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 font-semibold"
                 >
-                  ⚡ Đặt về gemini-3.8-flash
+                  ⚡ Đặt về gemini-2.5-flash (Ổn định nhất)
                 </button>
               </div>
               <select
@@ -815,9 +857,10 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
               >
-                <option value="gemini-3.8-flash">gemini-3.8-flash (Khuyên dùng: Mô hình thế hệ mới nhất của Google)</option>
-                <option value="gemini-3.8-pro">gemini-3.8-pro (Bản cao cấp suy luận chuyên sâu)</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash (Thế hệ 2.0)</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash (Khuyên dùng: Tốc độ cao, ổn định nhất của Google)</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash (Thế hệ Flash 2.0 phản hồi siêu nhanh)</option>
+                <option value="gemini-1.5-flash">gemini-1.5-flash (Thế hệ 1.5 ổn định cao)</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Bản mới nhất - Có thể quá tải tạm thời trên Google)</option>
               </select>
             </div>
 

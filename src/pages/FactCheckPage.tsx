@@ -430,7 +430,7 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
 
   // Gemini Settings State
   const [apiKey, setApiKey] = useState<string>(() => AiVerificationService.getGeminiApiKey() || '');
-  const [selectedModel, setSelectedModel] = useState<string>(() => AiVerificationService.getGeminiModel() || 'gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>(() => AiVerificationService.getGeminiModel() || 'gemini-3.8-flash');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
   const [testState, setTestState] = useState<{ testing: boolean; message: string | null; success: boolean | null }>({
@@ -844,12 +844,12 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedModel('gemini-2.5-flash');
-                    AiVerificationService.setGeminiModel('gemini-2.5-flash');
+                    setSelectedModel('gemini-3.8-flash');
+                    AiVerificationService.setGeminiModel('gemini-3.8-flash');
                   }}
                   className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 font-semibold"
                 >
-                  ⚡ Đặt về gemini-2.5-flash (Ổn định nhất)
+                  ⚡ Đặt về gemini-3.8-flash (Chuẩn Google)
                 </button>
               </div>
               <select
@@ -857,10 +857,10 @@ export const FactCheckPage: React.FC<Props> = ({ user, onUserUpdate }) => {
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
               >
-                <option value="gemini-2.5-flash">gemini-2.5-flash (Khuyên dùng: Tốc độ cao, ổn định nhất của Google)</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash (Thế hệ Flash 2.0 phản hồi siêu nhanh)</option>
-                <option value="gemini-1.5-flash">gemini-1.5-flash (Thế hệ 1.5 ổn định cao)</option>
-                <option value="gemini-3.8-flash">gemini-3.8-flash (Bản mới nhất - Có thể quá tải tạm thời trên Google)</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Chính thức được Google AI Studio khuyến nghị)</option>
+                <option value="gemini-3.5-flash">gemini-3.5-flash (Thế hệ 3.5 tốc độ cao)</option>
+                <option value="gemini-flash-latest">gemini-flash-latest (Bản Flash mới nhất tự động)</option>
+                <option value="gemini-3-flash-preview">gemini-3-flash-preview (Bản xem trước thế hệ 3)</option>
               </select>
             </div>
 

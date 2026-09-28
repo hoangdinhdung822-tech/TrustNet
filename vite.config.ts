@@ -10,8 +10,10 @@ function trustnetApiPlugin(): Plugin {
     name: 'trustnet-api-server',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        const urlPath = req.url ? req.url.split('?')[0].replace(/\/+$/, '') : '';
+
         // [GET] /api/v1/health
-        if (req.url === '/api/v1/health' && req.method === 'GET') {
+        if (urlPath === '/api/v1/health' && req.method === 'GET') {
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             status: 'online',
@@ -24,7 +26,7 @@ function trustnetApiPlugin(): Plugin {
         }
 
         // [POST] /api/v1/fact-check/ping
-        if (req.url === '/api/v1/fact-check/ping' && req.method === 'POST') {
+        if (urlPath === '/api/v1/fact-check/ping' && req.method === 'POST') {
           let body = '';
           req.on('data', chunk => { body += chunk; });
           req.on('end', async () => {
@@ -142,7 +144,7 @@ function trustnetApiPlugin(): Plugin {
         }
 
         // [POST] /api/v1/fact-check
-        if (req.url === '/api/v1/fact-check' && req.method === 'POST') {
+        if (urlPath === '/api/v1/fact-check' && req.method === 'POST') {
           let body = '';
           req.on('data', chunk => { body += chunk; });
           req.on('end', async () => {
@@ -183,6 +185,12 @@ export default defineConfig({
   plugins: [react(), trustnetApiPlugin()],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      }
+    }
   }
 });

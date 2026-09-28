@@ -8,7 +8,7 @@ import { AiVerificationResult, CodeInspectionReport } from '../types';
 
 const GEMINI_API_KEY_STORAGE = 'trustnet_gemini_api_key';
 const GEMINI_MODEL_STORAGE = 'trustnet_gemini_model';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
 // Danh sách từ khóa báo động giật gân, thao túng cảm xúc (Dành cho Inspector)
 const SENSATIONAL_WORDS = [
